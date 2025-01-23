@@ -1,0 +1,399 @@
+---
+title: "Runtime benchmark of NApy package against state-of-the-art libraries on simulated data"
+author: Fabian Woller, Lis Arend
+date: "2024-09-27"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## ----- Load required libraries -----
+required_packages <- c("data.table", "ggplot2", "dplyr", "patchwork", "RColorBrewer", "patchwork", "ggpubr", "ggnewscale")
+for(package in required_packages){
+  if(!require(package,character.only = TRUE, quietly = TRUE)) install.packages(package, dependencies = TRUE, quietly = TRUE)
+  library(package, character.only = TRUE, quietly = TRUE)
+}
+
+## ----- Colors -----
+
+library_colors <- c("NApy" = "#5b87ab", "SciPy" = "#018571", "SciPy - Python Loop" = "#80CDC1" , "pandas" = "#C01C8B", "Pingouin - Python Loop" = "#B2182B", "Pingouin" = "#F4A582","pandas - Python Loop" = "#F1B6DA", "NApy with Numba" = "#203f58", "NApy with C++" = "#acbed2")
+
+## ----- Methods Sorting -----
+
+method_sorting <-  c("Pearson", "Spearman", "t-test", "Mann-Whitney-U", "ANOVA", "Kruskal-Wallis", "Chi-squared")
+library_sorting <- c("NApy", "Pingouin", "SciPy", "pandas", "SciPy - Python Loop", "pandas - Python Loop")
+ncol <- 4
+
+## ----- Paths -----
+input_dir <- "../results/runtime/"
+out_dir <- "../plots/"
+
+
+## ----- Theme -----
+theme_new <- theme(axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14), legend.position = "top")
+
+## ----- Helper Function -----
+
+read_runtime_files <- function(file_path, average = TRUE){
+  dt <- read.csv(file_path)
+  dt <- as.data.table(dt)
+  
+  ## ----- Summarizing Runs -----
+  if(average) dt <- dt %>% group_by(samples, features, threads, na_ratio, library, method) %>% summarize(mean_time = mean(time, na.rm = TRUE), sd_time = sd(time, na.rm = TRUE))
+  return(dt)
+}
+
+rename_data <- function(runtime_dt){
+  runtime_dt$threads <- as.factor(runtime_dt$threads)
+  runtime_dt$features <- as.factor(runtime_dt$features)
+  runtime_dt$samples <- as.factor(runtime_dt$samples)
+  # Rename libraries
+  runtime_dt$library <- gsub("nanpy", "NApy", runtime_dt$library)
+  runtime_dt$library <- gsub("scipy", "SciPy", runtime_dt$library)
+  runtime_dt$library <- gsub("pingouin", "Pingouin", runtime_dt$library)
+  runtime_dt$library[runtime_dt$library == "SciPypar"] <- "SciPy - Python Loop"
+  runtime_dt$library[runtime_dt$library == "pandaspar"] <- "pandas - Python Loop"
+  runtime_dt$library[runtime_dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
+  # Rename methods
+  runtime_dt$method <- gsub("pearson", "Pearson", runtime_dt$method)
+  runtime_dt$method <- gsub("ttest", "t-test", runtime_dt$method)
+  runtime_dt$method <- gsub("anova", "ANOVA", runtime_dt$method)
+  runtime_dt$method <- gsub("chi2", "Chi-squared", runtime_dt$method)
+  runtime_dt$method <- gsub("spearman", "Spearman", runtime_dt$method)
+  runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", runtime_dt$method)
+  runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", runtime_dt$method)
+  runtime_dt$method <- factor(runtime_dt$method, levels = method_sorting)
+  
+  return(runtime_dt)
+}
+```
+
+# Reading Files and Preprocess Data
+
+```{r}
+# Read data summarized
+runtime_dt <- NULL
+for(file in list.files(input_dir, pattern = "simulated_")){
+  dt <- read_runtime_files(paste0(input_dir, file))
+  dt$file <- file
+  if(is.null(runtime_dt)){
+    runtime_dt <- dt
+  } else {
+    runtime_dt <- rbind(runtime_dt, dt)
+  }
+}
+
+runtime_dt <- rename_data(runtime_dt)
+```
+
+
+# Numba vs. C++ 
+
+```{r}
+# Extract numba and NApy
+runtime_dt_napy <- runtime_dt[runtime_dt$library %in% c("NApy", "numba"),]
+
+runtime_dt_napy$library[runtime_dt_napy$library == "numba"] <- "NApy with Numba"
+runtime_dt_napy$library[runtime_dt_napy$library == "NApy"] <- "NApy with C++"
+
+ggplot(runtime_dt_napy[runtime_dt_napy$samples == 1000 & runtime_dt_napy$method %in% c("Pearson", "Spearman"),], aes(x = features, y = mean_time, color = library, shape = threads, group = interaction(library, threads))) + 
+  geom_point(size = 2.5) + geom_line(aes(linetype = threads)) + geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.2) +
+  facet_wrap(~method, scales = "free_y", ncol = 4) + 
+  theme_bw() + scale_color_manual(values = library_colors) + labs(x = "Number of Features", y = "Mean Runtime (s)", color = "Library", shape = "Threads", linetype = "Threads") + theme_new
+
+ggsave(paste0(out_dir, "pear_spear_C_numba.png"), width = 8, height = 4, dpi = 300)
+
+
+ggplot(runtime_dt_napy[runtime_dt_napy$samples == 1000 & (! runtime_dt_napy$method %in% c("Pearson", "Spearman")),], aes(x = features, y = mean_time, color = library, shape = threads, group = interaction(library, threads))) + 
+  geom_point(size = 2.5) + geom_line(aes(linetype = threads)) + geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.2) +
+  facet_wrap(~method, scales = "free_y", ncol = 2) + 
+  theme_bw() + scale_color_manual(values = library_colors) + labs(x = "Number of Features", y = "Mean Runtime (s)", color = "Library", shape = "Threads", linetype = "Threads") + theme_new
+
+ggsave(paste0(out_dir, "others_C_numba.png"), width = 8, height = 11, dpi = 300)
+```
+
+Alternative visualization: 
+
+```{r}
+# Extract numba and NApy
+tmp <- runtime_dt_napy[runtime_dt_napy$features == 1000 & runtime_dt_napy$samples == 1000,]
+tmp <- tmp[, c("threads", "method", "mean_time", "library")]
+# Calculate for each thread and method combination, the fold change over the library (numba - C++)
+tmp <- tmp %>% group_by(threads, method) %>% summarize(fold_change = mean_time[library == "NApy with C++"] / mean_time[library == "NApy with Numba"], .groups = "drop")
+
+tmp$method <- factor(tmp$method, levels = rev(levels(tmp$method)))
+#tmp$fold_change <- log10(tmp$fold_change)
+
+ggplot(tmp, aes(x = threads, y = method, fill = log10(fold_change), label = round(fold_change, 2))) + geom_tile(color ="black") + geom_label(color = "black", fill = "white", alpha = 0.7) + theme_bw() + labs(x = "Number of Threads", y = "Statistical Test", fill =  "Log10 Runtime Fold Change") + guides(color = FALSE)  + scale_fill_gradient2(low = "#B2182B", high = "#2166AC", mid = "white", midpoint = 0, limits = c(-max(abs(log10(tmp$fold_change))), max(abs(log10(tmp$fold_change))))) + theme_new + theme(legend.position= "top") +
+  guides(fill = guide_colorbar(
+    title.position = "left",
+    title.vjust = 0.8,
+    barwidth = unit(5, "cm")
+))
+
+ggsave(paste0(out_dir, "numba_C_fold_change.png"), width = 7, height = 4, dpi = 300)
+
+```
+
+Update table with default NApy implementation
+
+```{r}
+## ----- For parametric libraries -> make numba -> NApy -----
+new_napy_param <- runtime_dt_napy[runtime_dt_napy$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & runtime_dt_napy$library == "NApy with Numba",]
+new_napy_param$library <- "NApy"
+new_napy_non_param <- runtime_dt_napy[runtime_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney-U") & runtime_dt_napy$library == "NApy with C++",]
+new_napy_non_param$library <- "NApy"
+
+runtime_dt <- runtime_dt[!runtime_dt$library %in% c("NApy", "numba"),]
+runtime_dt <- rbind(new_napy_param, new_napy_non_param, runtime_dt)
+
+runtime_dt$method <- factor(runtime_dt$method, levels = method_sorting)
+runtime_dt$library <- factor(runtime_dt$library, levels = library_sorting)
+```
+
+
+# Napy vs. State-of-the-Art Libraries
+
+Threads
+
+```{r}
+
+runtime_threads <- runtime_dt[runtime_dt$samples == 1000 & runtime_dt$features == 1000,]
+
+dt_pandas <- runtime_threads[runtime_threads$method %in% c("Pearson", "Spearman") & runtime_threads$library == "pandas",]
+dt_4 <- dt_pandas
+dt_16 <- dt_pandas
+dt_64 <- dt_pandas
+
+dt_4$threads <- as.factor(4)
+dt_16$threads <- as.factor(16)
+dt_64$threads <- as.factor(64)
+
+runtime_threads <- rbind(runtime_threads, dt_4, dt_16, dt_64)
+runtime_threads$pandas <- ifelse(runtime_threads$library == "pandas", TRUE, FALSE)
+
+#tmp <- runtime_threads[runtime_threads$method %in% c("Pearson", "Spearman", "t-test", "Mann-Whitney-U"),]
+#tmp$method <- factor(tmp$method, levels = c("Pearson", "Spearman", "t-test", "Mann-Whitney-U"))
+
+thread_plot <- ggplot(runtime_threads,
+                      aes(x = threads, y = mean_time, color = library, fill = library, group = library)) + 
+  geom_point(size = 2, alpha = 0.7) + geom_line(aes(linetype = pandas), alpha = 0.7) + 
+  geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.2) +
+  facet_wrap(~method, scales = "free_y", ncol = 7) + 
+  theme_bw() + 
+  scale_color_manual(values = library_colors) +
+  scale_fill_manual(values = library_colors) +
+  labs(x = "Number of Threads", y = "Mean Runtime (s)", color = "Library", fill = "Library") +
+  theme_new +
+  guides(linetype = FALSE)
+
+thread_plot
+```
+
+Magnitude
+
+```{r}
+# Select pandas for correlations and SciPy for all other tests
+plot_magnitude_heatmap <- function(dt, column = "threads", xlab = "Number of Threads"){
+  rt_corr <- dt[dt$method %in% c("Pearson", "Spearman") & dt$library %in% c("NApy", "pandas"),]
+  rt_corr <- rt_corr %>% group_by(samples, features, threads, method) %>% 
+    summarize(fold_change = mean_time[library == "pandas"] / mean_time[library == "NApy"], .groups = "drop")
+  rt_corr$library <- "pandas"
+  
+  rt_other <- dt[!dt$method %in% c("Pearson", "Spearman"),]
+  rt_other <- rt_other %>% group_by(samples, features, threads, method) %>% 
+    summarize(fold_change = mean_time[library == "SciPy - Python Loop"] / mean_time[library == "NApy"], .groups = "drop")
+  rt_other$library <- "SciPy - Python Loop"
+  
+  rt <- rbind(rt_corr, rt_other)
+  
+  rt$samples <- as.factor(rt$samples)
+  rt$features <- as.factor(rt$features)
+  rt$threads <- as.factor(rt$threads)
+  rt$method <- factor(rt$method, levels = rev(method_sorting))
+  rt$title <- "NApy VS Fastest Competitor"
+  
+  rt$log_fold_change <- log10(rt$fold_change)
+
+  p <- ggplot(rt, aes(x = get(column), y = method, fill = log_fold_change, label = round(fold_change, 2))) + 
+    geom_tile(aes(x = get(column), y = method), color ="black") + 
+    scale_fill_gradient(low = "white", high = "#2166AC",
+                         limits = c(0, 3.2), 
+                         name = "Log10 Runtime Fold Change",
+                         guide = guide_colorbar(title.position = "left", title.vjust = 0.8, barwidth = unit(5, "cm"))) +
+    geom_label(color = "black", fill = "white", alpha = 0.6) + 
+    scale_color_manual(values = library_colors, guide = "none") +
+    
+    labs(x = xlab, y = "Statistical Test") + 
+    theme_bw() + theme_new +
+    theme(legend.position = "bottom")
+  return(p)
+}
+
+heatmap_threads <- plot_magnitude_heatmap(runtime_threads, column = "threads", xlab = "Number of Threads")
+heatmap_threads
+```
+
+
+Sample and Feature Effect
+
+```{r}
+runtime_samples_features <- runtime_dt[runtime_dt$threads == 1 & runtime_dt$na_ratio == 0.1,]
+
+samples_plot <- ggplot(runtime_samples_features[runtime_samples_features$features == 1000,],
+                      aes(x = samples, y = mean_time, color = library, fill = library, group = library)) + 
+  geom_point(size = 2, alpha = 0.7) + geom_line(alpha = 0.7) + 
+  geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.2) +
+  facet_wrap(~method, scales = "free_y", ncol = 7) + 
+  theme_bw() + 
+  scale_color_manual(values = library_colors) +
+  scale_fill_manual(values = library_colors) +
+  labs(x = "Number of Samples", y = "Mean Runtime (s)", color = "Library", fill = "Library") +
+  theme_new
+  #theme(legend.position = "bottom") + theme_new
+
+samples_plot
+
+heatmap_samples <- plot_magnitude_heatmap(runtime_samples_features[runtime_samples_features$features == 1000,], column = "samples", xlab = "Number of Samples")
+heatmap_samples
+```
+
+
+```{r}
+features_plot <- ggplot(runtime_samples_features[runtime_samples_features$samples == 1000,],
+                      aes(x = features, y = mean_time, color = library, fill = library, group = library)) + 
+  geom_point(size = 2, alpha = 0.7) + geom_line(alpha = 0.7) + 
+  geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.2) +
+  facet_wrap(~method, scales = "free_y", ncol = 7) + 
+  theme_bw() + 
+  scale_color_manual(values = library_colors) +
+  scale_fill_manual(values = library_colors) +
+  labs(x = "Number of Features", y = "Mean Runtime (s)", color = "Library", fill = "Library") +
+  theme_new
+  #theme(legend.position = "bottom") + theme_new
+
+features_plot
+
+heatmap_features <- plot_magnitude_heatmap(runtime_samples_features[runtime_samples_features$samples == 1000,], column = "features", xlab = "Number of Features")
+heatmap_features
+```
+
+
+```{r}
+(features_plot + heatmap_features + plot_layout(widths = c(5,1))) / 
+  (samples_plot + heatmap_samples + plot_layout(widths = c(5,1))) / 
+  (thread_plot + heatmap_threads + plot_layout(widths = c(5,1)))  + 
+  plot_layout(guides = "collect") + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(size = 20, face = "bold"), legend.position = "bottom", strip.background = element_rect(fill = "white")) & guides(color = guide_legend(nrow = 1))
+
+
+(features_plot / samples_plot / thread_plot + plot_layout(guides = "collect") & theme(legend.position = "top") & guides(color = guide_legend(nrow = 1))) / (heatmap_features + heatmap_samples + heatmap_threads + plot_layout(axes = "collect", axis = "collect", guides = "collect") & theme(legend.position = "bottom")) + plot_layout(heights = c(1,1,1,1.2)) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(size = 20, face = "bold"), strip.background = element_rect(fill = "white"))
+
+
+ggsave(paste0(out_dir, "runtime_thread_sample_feature_effect.png"), width = 17, height = 14, dpi = 300)
+
+```
+
+
+
+# NA Ratio Influence
+
+```{r}
+input_dir <- "../results/na_ratios/"
+na_runtime_dt <- NULL
+for(file in list.files(input_dir, pattern = "_updated")){
+  dt <- read_runtime_files(paste0(input_dir, file))
+  dt$file <- file
+  if(is.null(na_runtime_dt)){
+    na_runtime_dt <- dt
+  } else {
+    na_runtime_dt <- rbind(na_runtime_dt, dt)
+  }
+}
+
+# Rename libraries
+
+na_runtime_dt$library <- gsub("nanpy", "NApy", na_runtime_dt$library)
+na_runtime_dt$library <- gsub("scipy", "SciPy", na_runtime_dt$library)
+na_runtime_dt$library <- gsub("pingouin", "Pingouin", na_runtime_dt$library)
+na_runtime_dt$library[na_runtime_dt$library == "SciPypar"] <- "SciPy - Python Loop"
+na_runtime_dt$library[na_runtime_dt$library == "pandaspar"] <- "pandas - Python Loop"
+na_runtime_dt$library[na_runtime_dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
+
+# Rename methods
+na_runtime_dt$method <- gsub("pearson", "Pearson", na_runtime_dt$method)
+na_runtime_dt$method <- gsub("ttest", "t-test", na_runtime_dt$method)
+na_runtime_dt$method <- gsub("anova", "ANOVA", na_runtime_dt$method)
+na_runtime_dt$method <- gsub("chi2", "Chi-squared", na_runtime_dt$method)
+na_runtime_dt$method <- gsub("spearman", "Spearman", na_runtime_dt$method)
+na_runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", na_runtime_dt$method)
+na_runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", na_runtime_dt$method)
+
+na_runtime_dt$method <- factor(na_runtime_dt$method, levels = method_sorting)
+```
+
+
+```{r}
+# Extract numba and NApy
+na_runtime_dt_napy <- na_runtime_dt[na_runtime_dt$library %in% c("NApy", "numba"),]
+
+na_runtime_dt_napy$library[na_runtime_dt_napy$library == "numba"] <- "NApy with Numba"
+na_runtime_dt_napy$library[na_runtime_dt_napy$library == "NApy"] <- "NApy with C++"
+
+ggplot(na_runtime_dt_napy, aes(x = na_ratio, y = mean_time, color = library, group = library)) + geom_point(size = 3) + 
+  facet_wrap(~method, scales = "free_y", ncol = 2) + geom_line() +
+  geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.02) +
+  theme_bw() + theme_new + scale_color_manual(values = library_colors, name = "Library") +
+  labs(x = "Missing Value Ratio", y = "Mean Runtime (s)")
+
+
+## ----- For parametric libraries -> make numba -> NApy -----
+new_napy_param <- na_runtime_dt_napy[na_runtime_dt_napy$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & na_runtime_dt_napy$library == "NApy with Numba",]
+new_napy_param$library <- "NApy"
+new_napy_non_param <- na_runtime_dt_napy[na_runtime_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney-U") & na_runtime_dt_napy$library == "NApy with C++",]
+new_napy_non_param$library <- "NApy"
+
+na_runtime_dt <- na_runtime_dt[!na_runtime_dt$library %in% c("NApy", "numba"),]
+na_runtime_dt <- rbind(new_napy_param, new_napy_non_param, na_runtime_dt)
+
+na_runtime_dt$method <- factor(na_runtime_dt$method, levels = method_sorting)
+na_runtime_dt$library <- factor(na_runtime_dt$library, levels = library_sorting)
+```
+
+
+```{r}
+ggplot(na_runtime_dt[na_runtime_dt$method %in% c("Pearson", "Spearman"),], aes(x = na_ratio, y = mean_time, color = library)) + geom_point(size = 3) + 
+  facet_wrap(~method, scales = "free_y", ncol = 2) + geom_line() +
+  geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.02) +
+  theme_bw() + theme_new + scale_color_manual(values = library_colors, name = "Library") +
+  labs(x = "Missing Value Ratio", y = "Mean Runtime (s)") + theme(legend.position = "none")
+
+ggsave(paste0(out_dir, "na_ratio_pearson_spearman.png"), width = 8, height = 4, dpi = 300)
+
+
+ggplot(na_runtime_dt[!na_runtime_dt$method %in% c("Pearson", "Spearman"),], aes(x = na_ratio, y = mean_time, color = library)) + geom_point(size = 3) + 
+  facet_wrap(~method, scales = "free_y", ncol = 2) + geom_line() +
+  geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.02) +
+  theme_bw() + theme_new + scale_color_manual(values = library_colors, name = "Library") +
+  labs(x = "Missing Value Ratio", y = "Mean Runtime (s)") + theme(legend.position = "none")
+
+ggsave(paste0(out_dir, "na_ratio_others.png"), width = 8, height = 11, dpi = 300)
+```
+
+Alternative way:
+
+```{r}
+#na_runtime_dt$na_ratio <- as.factor(na_runtime_dt$na_ratio)
+ggplot(na_runtime_dt, aes( x = na_ratio, y = method, fill = log10(mean_time), label = round(mean_time, 2))) + geom_tile() + geom_label()
+
+
+ggplot(na_runtime_dt, aes(x = na_ratio, y = mean_time, color = method)) +  geom_point(size = 3, alpha = 0.7) + geom_line(aes(group = method), alpha = 0.7) + geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.02) +
+  theme_bw() +
+  scale_color_brewer(palette = "Paired") + labs(x = "Missing Value Ratio", y = "Mean Runtime (s)", color = "Statistical Test") + theme_new + theme(legend.position = "right")
+
+ggsave(paste0(out_dir, "na_ratio.png"), width = 7, height = 4, dpi = 300)
+
+```

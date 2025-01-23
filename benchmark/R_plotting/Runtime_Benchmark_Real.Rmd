@@ -1,0 +1,142 @@
+---
+title: "Runtime benchmark of NApy package against state-of-the-art libraries on real-world data (CHRIS)"
+author: Fabian Woller, Lis Arend
+date: "2024-09-27"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## ----- Load required libraries -----
+required_packages <- c("data.table", "ggplot2", "dplyr", "patchwork", "RColorBrewer", "patchwork", "ggpubr")
+for(package in required_packages){
+  if(!require(package,character.only = TRUE, quietly = TRUE)) install.packages(package, dependencies = TRUE, quietly = TRUE)
+  library(package, character.only = TRUE, quietly = TRUE)
+}
+
+## ----- Colors -----
+
+library_colors <- c("NApy" = "#5b87ab", "SciPy" = "#018571", "SciPy - Python Loop" = "#80CDC1" , "pandas" = "#C01C8B", "Pingouin - Python Loop" = "#B2182B", "Pingouin" = "#F4A582","pandas - Python Loop" = "#F1B6DA", "NApy with Numba" = "#203f58", "NApy with C++" = "#acbed2")
+
+## ----- Methods Sorting -----
+
+method_sorting <-  c("Pearson", "Spearman", "t-test", "Mann-Whitney-U", "ANOVA", "Kruskal-Wallis", "Chi-squared")
+library_sorting <- c("NApy", "Pingouin", "SciPy", "pandas", "SciPy - Python Loop", "pandas - Python Loop")
+ncol <- 4
+
+## ----- Paths -----
+input_dir <- "../results/chris/"
+out_dir <- "../plots/"
+
+
+## ----- Theme -----
+theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14))
+
+## ----- Helper Function -----
+
+read_missing_values_files <- function(file_path, type){
+  dt <- read.csv(file_path, row.names = 1)
+  dt <- as.data.table(dt)
+  dt$Type <- type
+  colnames(dt) <- c("Nr_NA", "Type")
+  return(dt)
+}
+
+read_runtime_files <- function(file_path, average = TRUE){
+  dt <- read.csv(file_path)
+  dt <- as.data.table(dt)
+  
+  ## ----- Summarizing Runs -----
+  if(average) dt <- dt %>% group_by(samples, features, threads, na_ratio, library, method) %>% summarize(mean_time = mean(time, na.rm = TRUE), sd_time = sd(time, na.rm = TRUE))
+  return(dt)
+}
+
+rename_data <- function(runtime_dt){
+  # Rename methods
+  runtime_dt$method <- gsub("pearson", "Pearson", runtime_dt$method)
+  runtime_dt$method <- gsub("ttest", "t-test", runtime_dt$method)
+  runtime_dt$method <- gsub("anova", "ANOVA", runtime_dt$method)
+  runtime_dt$method <- gsub("chi2", "Chi-squared", runtime_dt$method)
+  runtime_dt$method <- gsub("spearman", "Spearman", runtime_dt$method)
+  runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", runtime_dt$method)
+  runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", runtime_dt$method)
+  runtime_dt$method <- factor(runtime_dt$method, levels = method_sorting)
+  
+  return(runtime_dt)
+}
+
+```
+
+# NA Values
+
+## Reading Files Including Missing Values per Variable
+
+```{r}
+NA_bin <- read_missing_values_files(paste0(input_dir, "chris_bin_missing.csv"), type = "Binary Categorical")
+NA_cat <- read_missing_values_files(paste0(input_dir, "chris_cat_missing.csv"), type = "Categorical")
+NA_cont <- read_missing_values_files(paste0(input_dir, "chris_cont_missing.csv"), type = "Continuous")
+
+NA_all <- rbind(NA_bin, NA_cat, NA_cont)
+
+NA_all$Nr_NA <- NA_all$Nr_NA / 13393
+
+# Remove rows with NA_ratio == 1
+NA_all <- NA_all[NA_all$Nr_NA != 1,]
+
+NA_all$Type <- factor(NA_all$Type, levels = c("Continuous", "Binary Categorical", "Categorical"))
+```
+
+## Plot Histogram of Missing Values per Variable
+
+```{r}
+ggplot(NA_all, aes(x = Nr_NA)) + geom_histogram(bins = 30) + facet_wrap(~Type, scales = "free") + theme_bw() + theme_new + theme(strip.background = element_rect(fill = "white")) + labs(x = "Missing Value Ratio", y = "Number of Features")
+
+ggsave(paste0(out_dir, "chris_missing_values.png"), width = 7, height = 3, dpi = 300)
+```
+
+# Runtimes
+
+```{r}
+runtimes_cat_cat <- read.csv(paste0(input_dir, "chris_cat_cat_results.csv"))
+runtimes_bin_cont <- read.csv(paste0(input_dir, "chris_bin_cont_results.csv"))
+runtimes_cont_cont <- read.csv(paste0(input_dir, "chris_cont_cont_results.csv"))
+runtimes_cat_cont <- read.csv(paste0(input_dir, "chris_cat_cont_results.csv"))
+
+pandas_threads <- runtimes_cont_cont[runtimes_cont_cont$library == "pandas",]
+pandas_threads$threads <- 64
+runtimes_cont_cont <- rbind(runtimes_cont_cont, pandas_threads)
+
+runtimes_CHRIS <- rbind(runtimes_cat_cat, runtimes_bin_cont, runtimes_cont_cont, runtimes_cat_cont)
+runtimes_CHRIS <- rename_data(runtimes_CHRIS)
+
+# take average of X runs
+runtimes_CHRIS <- runtimes_CHRIS %>% group_by(type1, type2, threads, method, library) %>% summarize(mean_time = mean(time))
+
+# calculate fold change
+runtimes_CHRIS_sum_scipy <- runtimes_CHRIS[! runtimes_CHRIS$method %in% c("Pearson", "Spearman"),] %>% group_by(type1, type2, threads, method) %>% reframe(fold_change = mean_time[library == "scipypar"] / mean_time[library == "nanpy"])
+
+runtimes_CHRIS_sum_pandas <- runtimes_CHRIS[runtimes_CHRIS$method %in% c("Pearson", "Spearman"),] %>% group_by(type1, type2, threads, method) %>% reframe(fold_change = mean_time[library == "pandas"] / mean_time[library == "nanpy"])
+
+runtimes_CHRIS_sum <- rbind(runtimes_CHRIS_sum_scipy, runtimes_CHRIS_sum_pandas)
+
+runtimes_CHRIS_sum$threads <- as.factor(runtimes_CHRIS_sum$threads)
+runtimes_CHRIS_sum$method <- factor(runtimes_CHRIS_sum$method, levels = rev(method_sorting))
+
+runtimes_CHRIS_sum$log_fold_change <- log10(runtimes_CHRIS_sum$fold_change)
+
+ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = round(fold_change, 2))) + 
+  geom_tile(color ="black") + 
+  geom_label(color = "black", fill = "white", alpha = 0.7) + 
+  labs( x = "Number of Threads", y = "Statistical Test", fill = "Log10 Runtime Fold Change") + theme_bw() + theme_new + theme(legend.position= "top") +
+  guides(fill = guide_colorbar(
+    title.position = "left",
+    title.vjust = 0.8,
+    barwidth = unit(5, "cm")
+)) + scale_fill_gradient2(low = "#B2182B", high = "#2166AC", mid = "white", midpoint = 0, limits = c(-max(abs(runtimes_CHRIS_sum$log_fold_change)), max(abs(runtimes_CHRIS_sum$log_fold_change))))
+ggsave(paste0(out_dir, "chris_fold_changes.png"), width = 7, height = 4, dpi = 300)
+
+```

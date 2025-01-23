@@ -1,0 +1,240 @@
+---
+title: "Memory benchmark of NApy package against state-of-the-art libraries on simulated data"
+author: Fabian Woller, Lis Arend
+date: "2024-09-27"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## ----- Load required libraries -----
+required_packages <- c("data.table", "ggplot2", "dplyr", "patchwork", "RColorBrewer", "patchwork", "ggpubr")
+for(package in required_packages){
+  if(!require(package,character.only = TRUE, quietly = TRUE)) install.packages(package, dependencies = TRUE, quietly = TRUE)
+  library(package, character.only = TRUE, quietly = TRUE)
+}
+
+## ----- Colors -----
+
+library_colors <- c("NApy" = "#5b87ab", "SciPy" = "#018571", "SciPy - Python Loop" = "#80CDC1" , "pandas" = "#C01C8B", "Pingouin - Python Loop" = "#B2182B", "Pingouin" = "#F4A582","pandas - Python Loop" = "#F1B6DA", "NApy with Numba" = "#203f58", "NApy with C++" = "#acbed2")
+
+## ----- Methods Sorting -----
+
+method_sorting <-  c("Pearson", "Spearman", "T-Test", "Mann-Whitney U", "ANOVA", "Kruskal-Wallis", "Chi2")
+library_sorting <- c("NApy", "Pingouin", "SciPy", "pandas", "SciPy - Python Loop", "pandas - Python Loop")
+ncol <- 4
+
+## ----- Paths -----
+input_dir <- "../results/runtime/"
+out_dir <- "../plots/"
+
+
+## ----- Theme -----
+theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14))
+
+## ----- Helper Function -----
+
+make_units_consistent <- function(dt){
+  dt <- dt %>% mutate(
+    size = as.numeric(gsub("[^0-9.]", "", memory)),
+    unit = gsub("[0-9.]", "", memory)
+  )
+  
+  dt$memory <- NULL
+  setnames(dt, "size", "memory")
+  
+  ## Transform Units
+  
+  # if unit is GB -> multiple by 1000
+  # if unit is KB -< divide by 1000
+  
+  dt <- dt %>% mutate(
+    memory = case_when(
+      unit == "MB" ~ memory / 1000,
+      unit == "KB" ~ memory / 1000000,
+      TRUE ~ memory
+    )
+  )
+  
+  dt$unit <- NULL
+  return(dt)
+}
+
+read_memory_files <- function(file_path){
+  dt <- read.csv(file_path)
+  dt <- as.data.table(dt)
+  
+  ## ----- Make memory units consistent -----
+  dt <- make_units_consistent(dt)
+  
+  ## ----- Summarizing Runs -----
+  summ_dt <- dt %>% group_by(samples, features, threads, na_ratio, library, method) %>% summarize(mean_mem = mean(memory, na.rm = TRUE), sd_mem = sd(memory, na.rm = TRUE))
+  return(summ_dt)
+}
+
+```
+
+# Reading Files and Preprocess Data
+
+```{r}
+## Memory 
+input_dir <- "../results/memory/"
+memory_dt <- NULL
+
+for(file in list.files(input_dir, pattern = "_updated")){
+  dt <- read_memory_files(paste0(input_dir, file))
+  dt$file <- file
+  if(is.null(memory_dt)){
+    memory_dt <- dt
+  } else {
+    memory_dt <- rbind(memory_dt, dt)
+  }
+}
+
+memory_dt$threads <- as.factor(memory_dt$threads)
+memory_dt$features <- as.factor(memory_dt$features)
+memory_dt$samples <- as.factor(memory_dt$samples)
+
+
+# Rename libraries
+
+memory_dt$library <- gsub("nanpy", "NApy", memory_dt$library)
+memory_dt$library <- gsub("scipy", "SciPy", memory_dt$library)
+memory_dt$library <- gsub("pingouin", "Pingouin", memory_dt$library)
+memory_dt$library[memory_dt$library == "SciPypar"] <- "SciPy - Python Loop"
+memory_dt$library[memory_dt$library == "pandaspar"] <- "pandas - Python Loop"
+memory_dt$library[memory_dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
+
+# Rename methods
+memory_dt$method <- gsub("pearson", "Pearson", memory_dt$method)
+memory_dt$method <- gsub("ttest", "T-Test", memory_dt$method)
+memory_dt$method <- gsub("anova", "ANOVA", memory_dt$method)
+memory_dt$method <- gsub("chi2", "Chi2", memory_dt$method)
+memory_dt$method <- gsub("spearman", "Spearman", memory_dt$method)
+memory_dt$method <- gsub("mwu", "Mann-Whitney U", memory_dt$method)
+memory_dt$method <- gsub("kruskal", "Kruskal-Wallis", memory_dt$method) # in runtime = kruskal_wallis
+
+memory_dt$method <- factor(memory_dt$method, levels = method_sorting)
+
+```
+
+# Numba vs. C++ 
+
+```{r}
+
+## NApy C++ vs numba
+memory_dt_napy <- memory_dt[memory_dt$library %in% c("NApy", "numba"),]
+
+memory_dt_napy$library[memory_dt_napy$library == "numba"] <- "NApy with Numba"
+memory_dt_napy$library[memory_dt_napy$library == "NApy"] <- "NApy with C++"
+
+
+ggplot(memory_dt_napy[memory_dt_napy$samples == 1000 & memory_dt_napy$features == 1000,], aes(x = threads, y = mean_mem, fill = library)) + 
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) + geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem), width = 0.2, position = position_dodge(width = 0.9)) +
+  facet_wrap(~method, scales = "free_y", ncol = 2) + 
+  theme_bw() + scale_fill_manual(values = library_colors) + labs(x = "Library", y = "Mean Runtime (s)", color = "Library") + theme_new
+```
+
+Update table with default NApy implementation
+
+```{r}
+## ----- For parametric libraries -> make numba -> NApy -----
+new_napy_param <- memory_dt_napy[memory_dt_napy$method %in% c("Pearson", "Chi2", "ANOVA", "T-Test") & memory_dt_napy$library == "NApy with Numba",]
+new_napy_param$library <- "NApy"
+new_napy_non_param <- memory_dt_napy[memory_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney U") & memory_dt_napy$library == "NApy with C++",]
+new_napy_non_param$library <- "NApy"
+
+memory_dt <- memory_dt[!memory_dt$library %in% c("NApy", "numba"),]
+memory_dt <- rbind(new_napy_param, new_napy_non_param, memory_dt)
+
+memory_dt$method <- factor(memory_dt$method, levels = method_sorting)
+memory_dt$library <- factor(memory_dt$library, levels = library_sorting)
+
+```
+
+
+```{r}
+dt <- memory_dt
+dt$samples <- NULL
+dt$features <- NULL
+dt$file <- NULL
+dt$na_ratio <- NULL
+
+dt <- dt[dt$threads == 1,]
+
+dt$threads <- NULL
+dt$memory <- paste0(round(dt$mean_mem, 3), " (", round(dt$sd_mem, 3), ")")
+dt$mean_mem <- NULL
+dt$sd_mem <- NULL
+
+dt <- dcast(as.data.table(dt), library ~ method, value.var = "memory")
+
+dt
+```
+
+
+
+
+# Comparison of NApy to competitors
+
+```{r}
+tmp_dt <- memory_dt[memory_dt$samples == 1000 & memory_dt$features == 1000,]
+tmp_dt <- tmp_dt[tmp_dt$threads == 1,]
+
+ggplot(tmp_dt[tmp_dt$method %in% c("Pearson", "Spearman", "T-Test", "Mann-Whitney U"),], aes(x = library, y = mean_mem, label = round(mean_mem, 2))) + geom_bar(aes(fill = library), stat = "identity", position = position_dodge(width = 0.9)) + 
+  facet_wrap(~method, scales = "free", ncol = 2) + scale_fill_manual(values = library_colors) + 
+  geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem, group = library), width = 0.2, position = position_dodge(width = 0.9)) +
+  theme_bw() + geom_label(aes(group = library), position = position_dodge(width = 0.9), vjust = -0.2) + 
+  labs(x = "Library", y = "Mean Memory (MB)", fill = "Library") + theme_new + theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(expand = expansion(mult = 0.2)) + theme(legend.position = "none")
+
+
+
+ggplot(tmp_dt[!tmp_dt$method %in% c("Pearson", "Spearman", "T-Test", "Mann-Whitney U"),], aes(x = library, y = mean_mem, label = round(mean_mem, 2))) + geom_bar(aes(fill = library), stat = "identity", position = position_dodge(width = 0.9)) + 
+  facet_wrap(~method, scales = "free", ncol = 2) + scale_fill_manual(values = library_colors) + 
+  geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem, group = library), width = 0.2, position = position_dodge(width = 0.9)) +
+  theme_bw() + geom_label(aes(group = library), position = position_dodge(width = 0.9), vjust = -0.2) + 
+  labs(x = "Library", y = "Mean Memory (MB)", fill = "Library") + theme_new + theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(expand = expansion(mult = 0.2))
+``` 
+
+
+NApy memory threads
+
+```{r}
+tmp_dt <- memory_dt[memory_dt$samples == 1000 & memory_dt$features == 1000,]
+tmp_dt <- tmp_dt[tmp_dt$library == "NApy",]
+
+tmp_dt$mean_mem <- round(tmp_dt$mean_mem, 3)
+tmp_dt <- dcast(as.data.table(tmp_dt), threads ~ method, value.var = "mean_mem")
+
+```
+
+```{r}
+tmp_dt <- memory_dt[memory_dt$samples == 1000 & memory_dt$features == 1000,]
+tmp_dt <- tmp_dt[tmp_dt$library == "NApy",]
+
+ggplot(tmp_dt[tmp_dt$method %in% c("Pearson", "Spearman", "T-Test", "Mann-Whitney U"),], aes(x = threads, y = mean_mem, label = round(mean_mem, 2))) + geom_bar(aes(fill = library), stat = "identity", position = position_dodge(width = 0.9)) + 
+  facet_wrap(~method, scales = "free", ncol = 2) + scale_fill_manual(values = library_colors) + 
+  geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem, group = library), width = 0.2, position = position_dodge(width = 0.9)) +
+  theme_bw() + geom_label(aes(group = library), position = position_dodge(width = 0.9), vjust = -0.2) + 
+  labs(x = "Library", y = "Mean Memory (MB)", fill = "Library") + theme_new
+
+
+tmp_dt <- memory_dt
+tmp_dt <- tmp_dt[tmp_dt$library == "NApy",]
+
+ggplot(tmp_dt[tmp_dt$method %in% c("Pearson"),], aes(x = features, y = mean_mem, label = round(mean_mem, 2))) + geom_bar(aes(fill = threads), stat = "identity", position = position_dodge(width = 0.9)) + 
+  facet_wrap(~samples, scales = "free", ncol = 2) + 
+  geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem, group = threads), width = 0.2, position = position_dodge(width = 0.9)) +
+  theme_bw() + scale_fill_brewer(name = "Set2") +
+  labs(x = "Number of Features", y = "Mean Memory (MB)", fill = "Number of Threads") + theme_new
+
+```
+
+
+

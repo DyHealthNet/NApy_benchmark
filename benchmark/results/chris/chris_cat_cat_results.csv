@@ -1,0 +1,13 @@
+type1,type2,threads,library,method,time
+cat,cat,1,nanpy,chi2,353.60340402275324
+cat,cat,1,scipypar,chi2,808.9767414443195
+cat,cat,64,nanpy,chi2,22.36945729702711
+cat,cat,64,scipypar,chi2,747.8785498067737
+cat,cat,1,nanpy,chi2,352.7473578732461
+cat,cat,1,scipypar,chi2,806.4898695666343
+cat,cat,64,nanpy,chi2,22.379888705909252
+cat,cat,64,scipypar,chi2,632.4965823534876
+cat,cat,1,nanpy,chi2,351.47548725269735
+cat,cat,1,scipypar,chi2,808.5763149280101
+cat,cat,64,nanpy,chi2,21.91406423971057
+cat,cat,64,scipypar,chi2,630.5263268370181
