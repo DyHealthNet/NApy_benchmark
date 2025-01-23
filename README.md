@@ -3,9 +3,11 @@
 This repository contains all benchmark implementations, results and plots for the manuscript "NApy: Efficient Statistics in Python for Large-Scale
 Heterogeneous Data with Enhanced Support for Missing Data".
 
+In order to run the benchmarks and tests described below, you need to have NApy installed and set up as described in our [main repository](https://github.com/DyHealthNet/NApy).
+
 # Benchmarking
 
-All benchmark implementations and results presented in our paper can be found in the `benchmark/` directory. Competitor implementations and our (parallelized) Python baseline implementation can be found in the subdirectory `benchmark/competitors/`, wrapper functions for NApy's functions to be called by benchmarking scripts can be found under `benchmark/nanpy_wrapper/`. The actual benchmarking scripts for running memory, runtime and CHRIS benchmark are located directly in `benchmark/`. Results of our runtime and memory analyses can be found in the respective subdirectories under `benchmark/results/`. R scripts for generating the plots included in our manuscript are available under `benchmark/R_plotting/` while the generated plots for our paper can be found under `benchmark/plots/`.
+All benchmark implementations and results presented in our paper can be found in the `benchmark/` directory. Competitor implementations and our (parallelized) Python baseline implementation can be found in the subdirectory `benchmark/competitors/`, wrapper functions for NApy's functions to be called by benchmarking scripts can be found under `benchmark/nanpy_wrapper/`. The actual benchmarking scripts for running memory, runtime and CHRIS benchmark are located directly in `benchmark/`. Results of our runtime and memory analyses can be found in the respective subdirectories under `benchmark/results/`. R scripts for generating the plots included in our manuscript are available under `benchmark/R_plotting/` while the generated plots for our paper can be found under `benchmark/plots/`. We offer a conda environment supporting the necessary python packages used in the benchmarking scripts in the `benchmark/` directory.
     
 
 # Testing
