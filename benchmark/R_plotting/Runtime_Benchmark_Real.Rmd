@@ -34,7 +34,7 @@ out_dir <- "../plots/"
 
 
 ## ----- Theme -----
-theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14))
+theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 12), axis.title.y = element_text(size = 12), legend.text = element_text(size = 12), legend.title = element_text(size = 12), strip.text = element_text(size = 12))
 
 ## ----- Helper Function -----
 
@@ -75,8 +75,10 @@ rename_data <- function(runtime_dt){
 
 ## Reading Files Including Missing Values per Variable
 
+Since CHRIS data is not allowed to be shared without permission, this analysis is not reproducible. However, upon request, data can be provided.
+
 ```{r}
-NA_bin <- read_missing_values_files(paste0(input_dir, "chris_bin_missing.csv"), type = "Binary Categorical")
+NA_bin <- read_missing_values_files(paste0(input_dir, "chris_bin_missing.csv"), type = "Dichotomous")
 NA_cat <- read_missing_values_files(paste0(input_dir, "chris_cat_missing.csv"), type = "Categorical")
 NA_cont <- read_missing_values_files(paste0(input_dir, "chris_cont_missing.csv"), type = "Continuous")
 
@@ -87,7 +89,7 @@ NA_all$Nr_NA <- NA_all$Nr_NA / 13393
 # Remove rows with NA_ratio == 1
 NA_all <- NA_all[NA_all$Nr_NA != 1,]
 
-NA_all$Type <- factor(NA_all$Type, levels = c("Continuous", "Binary Categorical", "Categorical"))
+NA_all$Type <- factor(NA_all$Type, levels = c("Continuous", "Dichotomous", "Categorical"))
 ```
 
 ## Plot Histogram of Missing Values per Variable
@@ -128,15 +130,33 @@ runtimes_CHRIS_sum$method <- factor(runtimes_CHRIS_sum$method, levels = rev(meth
 
 runtimes_CHRIS_sum$log_fold_change <- log10(runtimes_CHRIS_sum$fold_change)
 
-ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = round(fold_change, 2))) + 
+ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = round(log_fold_change, 2))) + 
   geom_tile(color ="black") + 
   geom_label(color = "black", fill = "white", alpha = 0.7) + 
-  labs( x = "Number of Threads", y = "Statistical Test", fill = "Log10 Runtime Fold Change") + theme_bw() + theme_new + theme(legend.position= "top") +
-  guides(fill = guide_colorbar(
+  labs( x = "Number of Threads", y = "Statistical Test", fill = "Log10(Runtime Fastest Competitor / Runtime NApy)") +
+  theme_bw() + theme_new + theme(legend.position= "top") +
+  scale_y_discrete(labels = function(labels) {
+  ifelse(
+    labels == "Chi-squared", expression(chi^2 ~ "-Test"),
+    ifelse(
+      labels == "t-test", expression(italic(t) ~ "-Test"),
+      ifelse(
+        labels == "Mann-Whitney-U", expression("Mann-Whitney" ~ italic(U)),
+        labels
+      )
+    )
+  )
+  }) +
+  scale_fill_gradient2(low = "#B2182B",
+                       high = "#2166AC",
+                       mid = "white", 
+                       midpoint = 0, 
+                       limits = c(-max(abs(runtimes_CHRIS_sum$log_fold_change)),max(abs(runtimes_CHRIS_sum$log_fold_change))))+
+   guides(fill = guide_colorbar(
     title.position = "left",
     title.vjust = 0.8,
-    barwidth = unit(5, "cm")
-)) + scale_fill_gradient2(low = "#B2182B", high = "#2166AC", mid = "white", midpoint = 0, limits = c(-max(abs(runtimes_CHRIS_sum$log_fold_change)), max(abs(runtimes_CHRIS_sum$log_fold_change))))
+    barwidth = unit(3, "cm")
+  ))
 ggsave(paste0(out_dir, "chris_fold_changes.png"), width = 7, height = 4, dpi = 300)
 
 ```
