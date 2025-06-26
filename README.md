@@ -8,7 +8,10 @@ In order to run the benchmarks and tests described below, you need to have NApy 
 # Benchmarking
 
 All benchmark implementations and results presented in our paper can be found in the `benchmark/` directory. Competitor implementations and our (parallelized) Python baseline implementation can be found in the subdirectory `benchmark/competitors/`, wrapper functions for NApy's functions to be called by benchmarking scripts can be found under `benchmark/nanpy_wrapper/`. The actual benchmarking scripts for running memory, runtime and CHRIS benchmark are located directly in `benchmark/`. Results of our runtime and memory analyses can be found in the respective subdirectories under `benchmark/results/`. R scripts for generating the plots included in our manuscript are available under `benchmark/R_plotting/` while the generated plots for our paper can be found under `benchmark/plots/`. We offer a conda environment supporting the necessary python packages used in the benchmarking scripts in the `benchmark/` directory.
-    
+
+## CHRIS benchmark data generation
+
+In order to produce the data used for our benchmarks on the CHRIS study, after being granted access via the CHRIS portal (https://chrisportal.eurac.edu/), you simply need to first run `benchmark/chris_preprocessing/tdff_to_csv.py` and then `benchmark/chris_preprocessing/separate_cat_cont.py` (after adjusting the corresponding paths to your local setup) in order to run the CHRIS benchmark scripts on these datasets.
 
 # Testing
 
