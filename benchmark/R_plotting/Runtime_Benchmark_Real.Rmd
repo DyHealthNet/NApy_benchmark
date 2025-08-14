@@ -130,7 +130,7 @@ runtimes_CHRIS_sum$method <- factor(runtimes_CHRIS_sum$method, levels = rev(meth
 
 runtimes_CHRIS_sum$log_fold_change <- log10(runtimes_CHRIS_sum$fold_change)
 
-ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = round(log_fold_change, 2))) + 
+ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = round(fold_change, 2))) + 
   geom_tile(color ="black") + 
   geom_label(color = "black", fill = "white", alpha = 0.7) + 
   labs( x = "Number of Threads", y = "Statistical Test", fill = "Log10(Runtime Fastest Competitor / Runtime NApy)") +
