@@ -93,6 +93,12 @@ if __name__ == "__main__":
         all_results = record_results(all_results, run_results, num_run=i)
 
         for num_threads in THREAD_LIST:
+            # Run empty subprocess to substract resources of subprocess alone.
+            run_results = run_benchmark_subprocess(f'Empty Subprocess',
+                                                   ["--threads", f"{num_threads}", "--file", "", "--tool", "empty", "--measure",
+                                                    "empty"])
+            all_results = record_results(all_results, run_results, num_run=i)
+
             # Pearson Correlation methods.
             run_results = run_benchmark_subprocess(f'Pearson NApyNumba NUM={i}',
                                      ["--threads", f'{num_threads}', "--file", str(data_napy_path), "--tool", "napy_numba", '--measure', "pearson"])

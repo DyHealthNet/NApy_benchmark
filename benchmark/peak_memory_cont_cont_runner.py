@@ -365,6 +365,49 @@ def calculate_pandas_spearman_par(data: np.ndarray, num_threads: int):
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
     return list(results)
 
+def run_empty_subprocess():
+    mem_log = []
+    stop_event = Event()
+
+    def monitor():
+        while not stop_event.is_set():
+            mem_log.append(mem_usage_all())
+            time.sleep(0.1)
+
+    monitor_thread = Thread(target=monitor)
+    monitor_thread.start()
+
+    time.sleep(2.0)
+
+    stop_event.set()
+    monitor_thread.join()
+
+    print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
+    return None
+
+def thread_sleep():
+    time.sleep(1.0)
+
+def run_sleeping_pool(threads : int):
+    mem_log = []
+    stop_event = Event()
+
+    def monitor():
+        while not stop_event.is_set():
+            mem_log.append(mem_usage_all())
+            time.sleep(0.1)
+
+    monitor_thread = Thread(target=monitor)
+    monitor_thread.start()
+
+    results = Parallel(n_jobs=threads)(delayed(thread_sleep)() for _ in range(threads))
+
+    stop_event.set()
+    monitor_thread.join()
+
+    print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
+    return results
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--threads", type=int)
@@ -420,6 +463,11 @@ if __name__ == "__main__":
         else:
             raise ValueError(f'Unknown tool: {args.tool}')
 
+    elif args.measure == "empty":
+        if args.threads == 1:
+            run_empty_subprocess()
+        else:
+            results = run_sleeping_pool(threads=args.threads)
     else:
         raise ValueError(f'Unknown measure: {args.measure}')
 
