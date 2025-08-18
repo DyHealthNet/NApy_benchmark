@@ -15,15 +15,17 @@ def run_benchmark_subprocess(name, args):
     )
     # Transform input arguments into dictionary for saving in CSV file.
     output_dict = {args[i][2:]: args[i + 1] for i in range(0, len(args), 2)}
-    for line in proc.stdout.splitlines():
-        if line.startswith("PEAK_MEMORY_MB:"):
-            peak_mem = float(line.split(":")[1])
-            output_dict['memory'] = peak_mem
-            print(f"{name} peak memory: {peak_mem:.2f} MB")
-        else:
-            print(proc.stdout)
-            print(proc.stderr)
-            output_dict['memory'] = np.nan
+    
+    # Read peak memory from file.
+    with open("process_memory.txt", 'r') as f:
+        peak_mem = float(f.read())
+    output_dict['memory'] = peak_mem
+    
+    # Delete memory result file.
+    if os.path.exists("process_memory.txt"):
+        os.remove("process_memory.txt")
+    
+    print(output_dict)
     return output_dict
 
 def record_results(total_results : dict, run_results : dict, num_run : int):
@@ -36,11 +38,11 @@ def record_results(total_results : dict, run_results : dict, num_run : int):
 
 if __name__ == "__main__":
     # Input parameters.
-    NUM_FEATURES = 200
-    NUM_SAMPLES = 400
-    THREAD_LIST = [1,4]
+    NUM_FEATURES = 1000
+    NUM_SAMPLES = 1000
+    THREAD_LIST = [1, 4, 16, 64]
     NA_RATIO = 0.1
-    NUM_RUNS = 1
+    NUM_RUNS = 3
 
     NA_VALUE = -99.0
     OUT_DIR = "peak_corr_corr_results/"

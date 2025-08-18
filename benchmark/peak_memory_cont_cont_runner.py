@@ -9,27 +9,6 @@ import napy
 import pandas as pd
 import pingouin as pg
 
-def anova_on_rows(cat, cont):
-    mask1 = np.isnan(cat)
-    mask2 = np.isnan(cont)
-    joined_mask = ~(mask1 | mask2)
-
-    sub_cat = cat[joined_mask]
-    sub_cont = cont[joined_mask]
-
-    zipped = np.column_stack((sub_cat, sub_cont))
-    zipped = zipped[zipped[:, 0].argsort()]
-    category_lists = np.split(
-        zipped[:, 1],
-        np.unique(zipped[:, 0], return_index=True)[1][1:]
-    )
-
-    try:
-        res = sc.stats.f_oneway(*category_lists)
-        return (res[0], res[1])
-    except Exception:
-        return (-999.0, -999.0)
-
 def mem_usage_all():
     proc = psutil.Process(os.getpid())
     total = proc.memory_info().rss
@@ -40,53 +19,11 @@ def mem_usage_all():
             pass
     return total / (1024 ** 2)  # MB
 
-def calculate_scipy_anova(bin_data: np.ndarray, cont_data: np.ndarray, num_threads: int):
-    mem_log = []
-    stop_event = Event()
-
-    def monitor():
-        while not stop_event.is_set():
-            mem_log.append(mem_usage_all())
-            time.sleep(0.1)
-
-    monitor_thread = Thread(target=monitor)
-    monitor_thread.start()
-
-    row_pairs = itertools.product(bin_data, cont_data)
-    results = Parallel(n_jobs=num_threads)(
-        delayed(anova_on_rows)(cat, cont) for cat, cont in row_pairs
-    )
-
-    stop_event.set()
-    monitor_thread.join()
-
-    print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return results
-
-def calculate_napy_anova(bin_data: np.ndarray, cont_data: np.ndarray, num_threads: int):
-    mem_log = []
-    stop_event = Event()
-
-    def monitor():
-        while not stop_event.is_set():
-            mem_log.append(mem_usage_all())
-            time.sleep(0.1)
-
-    monitor_thread = Thread(target=monitor)
-    monitor_thread.start()
-
-    res = napy.anova(cat_data=bin_data, cont_data=cont_data, threads=num_threads)
-
-    stop_event.set()
-    monitor_thread.join()
-
-    print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return res
-
 def calculate_pandas_corr_matrix(data : pd.DataFrame, method : str):
     """
     Compute full correlation matrix for row-wise correlations of pandas dataframe (default is column-wise).
     """
+    print("Running pandas corr matrix computation...")
     mem_log = []
     stop_event = Event()
 
@@ -103,8 +40,8 @@ def calculate_pandas_corr_matrix(data : pd.DataFrame, method : str):
     stop_event.set()
     monitor_thread.join()
 
-    print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return corr_mat
+    print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}", flush=True)
+    return max(mem_log)
 
 def calculate_pingouin_correlation(data : pd.DataFrame, method : str):
     """
@@ -127,7 +64,7 @@ def calculate_pingouin_correlation(data : pd.DataFrame, method : str):
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return res
+    return max(mem_log)
 
 def calculate_scipy_spearman(data : np.ndarray):
     mem_log = []
@@ -147,7 +84,7 @@ def calculate_scipy_spearman(data : np.ndarray):
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return res
+    return max(mem_log)
 
 def nanpy_pearson_wrapper(data : np.ndarray, threads : int, nan_value : float = -99.0):
     """
@@ -170,11 +107,12 @@ def nanpy_pearson_wrapper(data : np.ndarray, threads : int, nan_value : float = 
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return res
+    return max(mem_log)
 
 def nanpy_pearson_numba_wrapper(data : np.ndarray, threads : int, nan_value : float = -99.0):
 
-    #res = napy.pearsonr(data, nan_value=nan_value, axis=0, threads=threads, use_numba=True, return_types=['r2', 'p_unadjusted'])
+    res = napy.pearsonr(compile_input, nan_value=nan_value, axis=0, threads=threads, use_numba=True, return_types=['r2', 'p_unadjusted'])
+    time.sleep(2.0)
 
     mem_log = []
     stop_event = Event()
@@ -193,7 +131,7 @@ def nanpy_pearson_numba_wrapper(data : np.ndarray, threads : int, nan_value : fl
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return res
+    return max(mem_log)
 
 def pearson_on_rows(row1, row2):
     # Take non-NAN subarrays.
@@ -229,7 +167,7 @@ def calculate_scipy_pearson_par(data: np.ndarray, num_threads: int):
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return list(results)
+    return max(mem_log)
 
 def pearson_on_rows_pandas(row1, row2):
     # Take non-NAN subarrays.
@@ -259,7 +197,7 @@ def calculate_pandas_pearson_par(data: np.ndarray, num_threads: int):
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return list(results)
+    return max(mem_log)
 
 def nanpy_spearman_wrapper(data : np.ndarray, threads : int, nan_value : float = -99.0):
     """
@@ -283,11 +221,14 @@ def nanpy_spearman_wrapper(data : np.ndarray, threads : int, nan_value : float =
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return res
+    return max(mem_log)
 
 def nanpy_spearman_numba_wrapper(data : np.ndarray, threads : int, nan_value : float = -99.0):
-    #res = napy.spearmanr(data, nan_value=nan_value, axis=0, threads=threads, use_numba=True,
-    #                     return_types=['rho', 'p_unadjusted'])
+    
+    res = napy.spearmanr(np.eye(5), nan_value=nan_value, axis=0, threads=threads, use_numba=True,
+                         return_types=['rho', 'p_unadjusted'])
+    time.sleep(2.0)
+    
     mem_log = []
     stop_event = Event()
 
@@ -306,7 +247,7 @@ def nanpy_spearman_numba_wrapper(data : np.ndarray, threads : int, nan_value : f
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return res
+    return max(mem_log)
 
 def spearman_on_rows_scipy(row1, row2):
     # Take non-NAN subarrays.
@@ -333,7 +274,7 @@ def calculate_scipy_spearman_par(data: np.ndarray, num_threads: int):
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return list(results)
+    return max(mem_log)
 
 def spearman_on_rows(row1, row2):
     # Take non-NAN subarrays.
@@ -363,7 +304,7 @@ def calculate_pandas_spearman_par(data: np.ndarray, num_threads: int):
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return list(results)
+    return max(mem_log)
 
 def run_empty_subprocess():
     mem_log = []
@@ -383,7 +324,7 @@ def run_empty_subprocess():
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return None
+    return max(mem_log)
 
 def thread_sleep():
     time.sleep(1.0)
@@ -406,7 +347,7 @@ def run_sleeping_pool(threads : int):
     monitor_thread.join()
 
     print(f"PEAK_MEMORY_MB: {max(mem_log):.2f}")
-    return results
+    return max(mem_log)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -419,56 +360,60 @@ if __name__ == "__main__":
     if args.measure == "pearson":
         if args.tool == "pandas":
             data = pd.read_csv(args.file, index_col=0)
-            result = calculate_pandas_corr_matrix(data=data, method='pearson')
+            peak_mem = 0.0
+            peak_mem = calculate_pandas_corr_matrix(data=data, method='pearson')
         elif args.tool == "pingouin":
             data = pd.read_csv(args.file, index_col=0)
-            result = calculate_pingouin_correlation(data=data, method='pearson')
+            peak_mem = calculate_pingouin_correlation(data=data, method='pearson')
         elif args.tool == "napy_numba":
             data = np.load(args.file)
-            result = nanpy_pearson_numba_wrapper(data=data, threads=args.threads)
+            peak_mem = nanpy_pearson_numba_wrapper(data=data, threads=args.threads)
         elif args.tool == "napy_cpp":
             data = np.load(args.file)
-            result = nanpy_pearson_wrapper(data=data, threads=args.threads)
+            peak_mem = nanpy_pearson_wrapper(data=data, threads=args.threads)
         elif args.tool == "scipy_par":
             data = np.load(args.file)
-            result = calculate_scipy_pearson_par(data=data, num_threads=args.threads)
+            peak_mem = calculate_scipy_pearson_par(data=data, num_threads=args.threads)
         elif args.tool == "pandas_par":
             data = np.load(args.file)
-            result = calculate_pandas_pearson_par(data=data, num_threads=args.threads)
+            peak_mem = calculate_pandas_pearson_par(data=data, num_threads=args.threads)
         else:
             raise ValueError(f'Unknown tool: {args.tool}')
 
     elif args.measure == "spearman":
         if args.tool == "scipy":
             data = np.load(args.file)
-            result = calculate_scipy_spearman(data)
+            peak_mem = calculate_scipy_spearman(data)
         elif args.tool == "pandas":
             data = pd.read_csv(args.file, index_col=0)
-            result = calculate_pandas_corr_matrix(data=data, method='spearman')
+            peak_mem = calculate_pandas_corr_matrix(data=data, method='spearman')
         elif args.tool == "pingouin":
             data = pd.read_csv(args.file, index_col=0)
-            result = calculate_pingouin_correlation(data=data, method='spearman')
+            peak_mem = calculate_pingouin_correlation(data=data, method='spearman')
         elif args.tool == "napy_numba":
             data = np.load(args.file)
-            result = nanpy_spearman_numba_wrapper(data, threads=args.threads)
+            peak_mem = nanpy_spearman_numba_wrapper(data, threads=args.threads)
         elif args.tool == "napy_cpp":
             data = np.load(args.file)
-            result = nanpy_spearman_wrapper(data, threads=args.threads)
+            peak_mem = nanpy_spearman_wrapper(data, threads=args.threads)
         elif args.tool == "scipy_par":
             data = np.load(args.file)
-            result = calculate_scipy_spearman_par(data, num_threads=args.threads)
+            peak_mem = calculate_scipy_spearman_par(data, num_threads=args.threads)
         elif args.tool == "pandas_par":
             data = np.load(args.file)
-            result = calculate_pandas_spearman_par(data, num_threads=args.threads)
+            peak_mem = calculate_pandas_spearman_par(data, num_threads=args.threads)
         else:
             raise ValueError(f'Unknown tool: {args.tool}')
 
     elif args.measure == "empty":
         if args.threads == 1:
-            run_empty_subprocess()
+            peak_mem = run_empty_subprocess()
         else:
-            results = run_sleeping_pool(threads=args.threads)
+            peak_mem = run_sleeping_pool(threads=args.threads)
     else:
         raise ValueError(f'Unknown measure: {args.measure}')
 
+    # Drop peak memory value into file.
+    with open("process_memory.txt", 'w') as f:
+        f.write(f"{peak_mem}\n")
 
