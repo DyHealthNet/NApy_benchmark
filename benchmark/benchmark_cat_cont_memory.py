@@ -6,7 +6,7 @@ from simulator import simulate_cont_data
 from simulator import simulate_cat_data
 from logger import add_time_to_results
 from nanpy_wrapper.anova_wrapper import nanpy_anova_wrapper, nanpy_anova_wrapper_numba
-from nanpy_wrapper.kw_wrapper import nanpy_kruskal_wallis_wrapper
+from nanpy_wrapper.kw_wrapper import nanpy_kruskal_wallis_wrapper, nanpy_kruskal_wallis_wrapper_numba
 from competitors.scipy_anova import calculate_scipy_anova
 from competitors.scipy_kruskal import calculate_scipy_kruskal
 import memray
@@ -86,6 +86,10 @@ if __name__ == "__main__":
                             # Run nanpy Kruskal-Wallis test.
                             with memray.Tracker(file_dir + f'/nanpy_kruskal_{nr_features}_{nr_samples}_{na_ratio}_{nr_threads}_{i}.bin', follow_fork=True, native_traces=False):
                                 res, nanpy_time = nanpy_kruskal_wallis_wrapper(cat_data_np, cont_data_np, NA_VALUE,
+                                                                           nr_threads)
+
+                            with memray.Tracker(file_dir + f'/numba_kruskal_{nr_features}_{nr_samples}_{na_ratio}_{nr_threads}_{i}.bin', follow_fork=True, native_traces=False):
+                                res, nanpy_time = nanpy_kruskal_wallis_wrapper_numba(cat_data_np, cont_data_np, NA_VALUE,
                                                                            nr_threads)
 
                             # Run scipy Kruskal-Wallis test.

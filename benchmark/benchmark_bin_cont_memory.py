@@ -6,7 +6,7 @@ from simulator import simulate_cont_data
 from simulator import simulate_cat_data
 from logger import add_time_to_results
 from nanpy_wrapper.ttest_wrapper import nanpy_ttest_wrapper, nanpy_ttest_wrapper_numba
-from nanpy_wrapper.mwu_wrapper import nanpy_mwu_wrapper
+from nanpy_wrapper.mwu_wrapper import nanpy_mwu_wrapper, nanpy_mwu_wrapper_numba
 from competitors.scipy_ttest import calculate_scipy_ttest
 from competitors.scipy_mwu import calculate_scipy_mwu
 import memray
@@ -88,6 +88,10 @@ if __name__ == "__main__":
                             with memray.Tracker(file_dir + f'/nanpy_mwu_{nr_features}_{nr_samples}_{na_ratio}_{nr_threads}_{i}.bin',
                                                 native_traces=False, follow_fork=True):
                                 res, nanpy_time = nanpy_mwu_wrapper(bin_data_np, cont_data_np, NA_VALUE, nr_threads)
+
+                            with memray.Tracker(file_dir + f'/numba_mwu_{nr_features}_{nr_samples}_{na_ratio}_{nr_threads}_{i}.bin',
+                                                native_traces=False, follow_fork=True):
+                                res, nanpy_time = nanpy_mwu_wrapper_numba(bin_data_np, cont_data_np, NA_VALUE, nr_threads)
 
                             with memray.Tracker(file_dir + f'/scipypar_mwu_{nr_features}_{nr_samples}_{na_ratio}_{nr_threads}_{i}.bin',
                                                 native_traces=False, follow_fork=True):
