@@ -64,6 +64,7 @@ rename_data <- function(runtime_dt){
   runtime_dt$method <- gsub("spearman", "Spearman", runtime_dt$method)
   runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", runtime_dt$method)
   runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", runtime_dt$method)
+  runtime_dt$method <- gsub("kw", "Kruskal-Wallis", runtime_dt$method)
   runtime_dt$method <- factor(runtime_dt$method, levels = method_sorting)
   
   return(runtime_dt)
@@ -119,18 +120,25 @@ runtimes_CHRIS <- rename_data(runtimes_CHRIS)
 runtimes_CHRIS <- runtimes_CHRIS %>% group_by(type1, type2, threads, method, library) %>% summarize(mean_time = mean(time))
 
 # calculate fold change
-runtimes_CHRIS_sum_scipy <- runtimes_CHRIS[! runtimes_CHRIS$method %in% c("Pearson", "Spearman"),] %>% group_by(type1, type2, threads, method) %>% reframe(fold_change = mean_time[library == "scipypar"] / mean_time[library == "nanpy"])
+runtimes_CHRIS_sum_scipy <- runtimes_CHRIS[! runtimes_CHRIS$method %in% c("Pearson", "Spearman"),] %>% group_by(type1, type2, threads, method) %>% reframe(fold_change_comp_napy = mean_time[library == "scipypar"] / mean_time[library == "nanpy"],
+                                                                                                                                                           fold_change_napy_comp = mean_time[library == "nanpy"] / mean_time[library == "scipypar"])
 
-runtimes_CHRIS_sum_pandas <- runtimes_CHRIS[runtimes_CHRIS$method %in% c("Pearson", "Spearman"),] %>% group_by(type1, type2, threads, method) %>% reframe(fold_change = mean_time[library == "pandas"] / mean_time[library == "nanpy"])
+runtimes_CHRIS_sum_pandas <- runtimes_CHRIS[runtimes_CHRIS$method %in% c("Pearson", "Spearman"),] %>% group_by(type1, type2, threads, method) %>% reframe(fold_change_comp_napy = mean_time[library == "pandas"] / mean_time[library == "nanpy"],
+                                                                                                                                                          fold_change_napy_comp = mean_time[library == "nanpy"] / mean_time[library == "pandas"])
 
 runtimes_CHRIS_sum <- rbind(runtimes_CHRIS_sum_scipy, runtimes_CHRIS_sum_pandas)
 
 runtimes_CHRIS_sum$threads <- as.factor(runtimes_CHRIS_sum$threads)
 runtimes_CHRIS_sum$method <- factor(runtimes_CHRIS_sum$method, levels = rev(method_sorting))
 
-runtimes_CHRIS_sum$log_fold_change <- log10(runtimes_CHRIS_sum$fold_change)
+runtimes_CHRIS_sum$log_fold_change <- log10(runtimes_CHRIS_sum$fold_change_comp_napy)
 
-ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = round(fold_change, 2))) + 
+runtimes_CHRIS_sum$label <- paste0("NApy x ", round(runtimes_CHRIS_sum$fold_change_comp_napy, 2))
+
+runtimes_CHRIS_sum$label[runtimes_CHRIS_sum$method == "Pearson" & runtimes_CHRIS_sum$threads == 1] <- paste0("pandas x ", round(runtimes_CHRIS_sum$fold_change_napy_comp[runtimes_CHRIS_sum$method == "Pearson" & runtimes_CHRIS_sum$threads == 1], 2))
+
+
+ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = label)) + 
   geom_tile(color ="black") + 
   geom_label(color = "black", fill = "white", alpha = 0.7) + 
   labs( x = "Number of Threads", y = "Statistical Test", fill = "Log10(Runtime Fastest Competitor / Runtime NApy)") +

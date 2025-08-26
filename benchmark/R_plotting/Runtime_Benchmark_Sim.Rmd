@@ -104,17 +104,25 @@ runtime_dt_napy$library[runtime_dt_napy$library == "NApy"] <- "NApy with C++"
 tmp <- runtime_dt_napy[runtime_dt_napy$features == 1000 & runtime_dt_napy$samples == 1000,]
 tmp <- tmp[, c("threads", "method", "mean_time", "library")]
 # Calculate for each thread and method combination, the fold change over the library (numba - C++)
-tmp <- tmp %>% group_by(threads, method) %>% summarize(fold_change = mean_time[library == "NApy with C++"] / mean_time[library == "NApy with Numba"], .groups = "drop")
+tmp <- tmp %>% group_by(threads, method) %>% summarize(fold_change_c_numba = mean_time[library == "NApy with C++"] / mean_time[library == "NApy with Numba"], fold_change_numba_c = mean_time[library == "NApy with Numba"] / mean_time[library == "NApy with C++"], .groups = "drop")
 
 tmp$method <- factor(tmp$method, levels = rev(levels(tmp$method)))
-#tmp$fold_change <- log10(tmp$fold_change)
 
-ggplot(tmp, aes(x = threads, y = method, fill = log10(fold_change), label = round(fold_change, 2))) + 
+tmp$fold_change <- tmp$fold_change_c_numba
+tmp$fold_change[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis", "Chi-squared")]
+
+tmp$winner_label <- paste0("Numba x ", round(tmp$fold_change_c_numba, 2))
+tmp$winner_label[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- paste0("C++ x ",  round(tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")],2))
+  
+
+tmp$label <- paste0(round(tmp$fold_change_c_numba,2), " (", round(tmp$fold_change,2), ")")
+
+ggplot(tmp, aes(x = threads, y = method, fill = log10(fold_change_c_numba), label = winner_label)) + 
   geom_tile(color ="black") + geom_label(color = "black", fill = "white", alpha = 0.7) + 
   theme_bw() + labs(x = "Number of Threads", y = "Statistical Test", fill =  "Log10(Runtime C++ / Runtime Numba)") + 
   guides(color = FALSE)  + 
   scale_fill_gradient2(low = "#B2182B", high = "#2166AC", mid = "white", midpoint = 0, 
-                       limits = c(-max(abs(log10(tmp$fold_change))), max(abs(log10(tmp$fold_change))))) + 
+                       limits = c(-max(abs(log10(tmp$fold_change_c_numba))), max(abs(log10(tmp$fold_change_c_numba))))) + 
   theme_new + theme(legend.position= "top") +
   scale_y_discrete(labels = function(labels) {
   ifelse(
@@ -135,8 +143,89 @@ ggplot(tmp, aes(x = threads, y = method, fill = log10(fold_change), label = roun
     barwidth = unit(4, "cm")
 ))
 
-ggsave(paste0(out_dir, "numba_C_fold_change.png"), width = 7, height = 4, dpi = 300)
+ggsave(paste0(out_dir, "numba_C_fold_change.png"), width = 9, height = 5, dpi = 300)
+
+ggplot(tmp, aes(x = threads, y = method, fill = fold_change_c_numba, label = round(fold_change_c_numba, 2))) + 
+  geom_tile(color ="black") + geom_label(color = "black", fill = "white", alpha = 0.7) + 
+  theme_bw() + labs(x = "Number of Threads", y = "Statistical Test", fill =  "Runtime C++ / Runtime Numba") + 
+  guides(color = FALSE)  + 
+  scale_fill_gradient(low = "white", high = "#013870", 
+                       limits = c(0, max(abs(tmp$fold_change_c_numba)))) + 
+  theme_new + theme(legend.position= "top") +
+  scale_y_discrete(labels = function(labels) {
+  ifelse(
+    labels == "Chi-squared", expression(chi^2 ~ "-Test"),
+    ifelse(
+      labels == "t-test", expression(italic(t) ~ "-Test"),
+      ifelse(
+        labels == "Mann-Whitney-U", expression("Mann-Whitney" ~ italic(U)),
+        labels
+      )
+    )
+  )
+  }) +
+  guides(fill = guide_colorbar(
+    title.position = "left",
+    title.hjust = 0.5,
+    title.vjust = 0.8,
+    barwidth = unit(4, "cm")
+))
+
+
 ```
+
+```{r}
+
+tmp$winner_label <- paste0("x ", round(tmp$fold_change_c_numba, 2))
+tmp$winner_label[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- paste0("x ",  round(tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")],2))
+
+
+tmp$label_pos <- log10(tmp$fold_change_c_numba)
+tmp$label_pos[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- tmp$label_pos[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] - 0.27
+  
+
+p <- ggplot(tmp, aes(y = method, color = factor(threads))) +
+  
+  # lollipop sticks (horizontal lines)
+  geom_segment(aes(x = 0, xend = log10(fold_change_c_numba), 
+                   y = as.numeric(method) + 
+                       (as.numeric(factor(threads)) - 2.5) * 0.15,  # manual offset
+                   yend = as.numeric(method) + 
+                          (as.numeric(factor(threads)) - 2.5) * 0.15),
+               alpha = 0.5) +
+  
+  # points with the same offset
+  geom_point(aes(x = log10(fold_change_c_numba), 
+                 y = as.numeric(method) + 
+                     (as.numeric(factor(threads)) - 2.5) * 0.15),
+             size = 2) +
+  
+   # labels
+  geom_text(aes(x = label_pos, 
+                y = as.numeric(method) + (as.numeric(threads) - mean(as.numeric(threads))) * 0.15, 
+                label = winner_label),
+            hjust = -0.2,   # push a bit to the right of the dot
+            size = 3) +
+  
+  
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_y_continuous(breaks = seq_along(levels(tmp$method)), 
+                     labels = levels(tmp$method)) +
+  labs(x = "Log10(Runtime C++ / Runtime Numba)",
+       y = "Statistical Test",
+       color = "Threads", shape = "Threads") +
+  scale_x_continuous(limits = c(-max(abs(tmp$label_pos)), max(abs(tmp$label_pos)))) + 
+  scale_color_brewer(palette = "Set2") +
+  theme_bw() +
+  ggtitle("C++      Numba") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave(paste0(out_dir, "numba_C_fold_change_dumbbell.png"), width = 8, height = 4, dpi = 300)
+
+```
+
+
+
 
 Update table with default NApy implementation
 
@@ -203,26 +292,6 @@ thread_plot <- ggplot(runtime_threads_recoded,
 thread_plot
 ```
 
-Thread Plot Only NApy
-
-```{r}
-thread_plot_napy <- ggplot(runtime_threads_recoded[runtime_threads_recoded$library == "NApy",],
-                      aes(x = threads, y = mean_time, color = library, fill = library, group = library)) + 
-  geom_point(size = 2, alpha = 0.7) + geom_line(aes(linetype = pandas), alpha = 0.7) + 
-  geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.2) +
-  facet_wrap(~method, scales = "free_y", ncol = 7, label = "label_parsed") +
-  theme_bw() + 
-  scale_color_manual(values = library_colors) +
-  scale_fill_manual(values = library_colors) +
-  labs(x = "Number of Threads", y = "Log10 Mean Runtime (s)", color = "Library", fill = "Library") +
-  theme_new + 
-  guides(color = "none", fill = "none", linetype = "none", shape = "none") +
-  theme(legend.position = "none")
-
-thread_plot_napy
-
-```
-
 
 Magnitude Plot 
 
@@ -248,11 +317,12 @@ plot_magnitude_heatmap <- function(dt, column = "threads", xlab = "Number of Thr
   rt$title <- "NApy VS Fastest Competitor"
   
   rt$log_fold_change <- log10(rt$fold_change)
+  rt$label <- paste0("x ", round(rt$fold_change, 2) )
 
-  p <- ggplot(rt, aes(x = get(column), y = method, fill = log10(fold_change), label = round(fold_change, 2))) + 
+  p <- ggplot(rt, aes(x = get(column), y = method, fill = log_fold_change, label = label)) + 
     geom_tile(aes(x = get(column), y = method), color ="black") + 
-    scale_fill_gradient(low = "white", high = "#2166AC",
-                         limits = c(0, 3.2), 
+    scale_fill_gradient(low = "white", high = "#2166AC", #" "#013870"
+                         limits = c(0, 3.2), # 1100
                          name = "Log10(Runtime Fastest Competitor / Runtime NApy)",
                          guide = guide_colorbar(title.position = "left", title.vjust = 0.8, barwidth = unit(5, "cm"))) +
     geom_label(color = "black", fill = "white", alpha = 0.6) + 
@@ -346,7 +416,9 @@ heatmap_features
 ggsave(paste0(out_dir, "runtime_thread_sample_feature_effect.png"), width = 17, height = 16, dpi = 300)
 
 ```
-## Supplementary Tables
+
+
+## Supplementary Table
 
 ```{r}
 runtime_threads_recoded <- runtime_threads_recoded[runtime_threads_recoded$library == "NApy",]
@@ -358,8 +430,10 @@ runtime_samples_features_recoded <- runtime_samples_features_recoded[, c("sample
 runtime_samples_features_recoded <- dcast(as.data.table(runtime_samples_features_recoded), samples + features + threads ~ method, value.var = "mean_time", fill = "0")
 
 runtime_recoded <- rbind(runtime_samples_features_recoded, runtime_threads_recoded)
-x <- xtable(runtime_recoded, align = c("|c","|c","|c","|c","|c", "|c", "|c", "|c", "|c", "|c", "|c|"))
-print(x, include.row.names = FALSE)
+runtime_recoded <- runtime_recoded %>%
+  mutate(across((ncol(runtime_recoded)-6):ncol(runtime_recoded), ~ round(.x, 3)))
+
+write.csv(runtime_recoded, paste0(out_dir, "runtime_thread_sample_feature_effect_NApy.csv"))
                                        
 ```
 
