@@ -34,7 +34,7 @@ out_dir <- "../plots/"
 
 
 ## ----- Theme -----
-theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14))
+theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14), strip.background = element_rect(fill = "white"))
 
 ## ----- Helper Function -----
 
