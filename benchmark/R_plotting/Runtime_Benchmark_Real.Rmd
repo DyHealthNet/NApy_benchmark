@@ -133,15 +133,15 @@ runtimes_CHRIS_sum$method <- factor(runtimes_CHRIS_sum$method, levels = rev(meth
 
 runtimes_CHRIS_sum$log_fold_change <- log10(runtimes_CHRIS_sum$fold_change_comp_napy)
 
-runtimes_CHRIS_sum$label <- paste0("NApy x ", round(runtimes_CHRIS_sum$fold_change_comp_napy, 2))
+runtimes_CHRIS_sum$label <- paste0(round(runtimes_CHRIS_sum$fold_change_comp_napy, 2), " / 1")
 
-runtimes_CHRIS_sum$label[runtimes_CHRIS_sum$method == "Pearson" & runtimes_CHRIS_sum$threads == 1] <- paste0("pandas x ", round(runtimes_CHRIS_sum$fold_change_napy_comp[runtimes_CHRIS_sum$method == "Pearson" & runtimes_CHRIS_sum$threads == 1], 2))
+runtimes_CHRIS_sum$label[runtimes_CHRIS_sum$method == "Pearson" & runtimes_CHRIS_sum$threads == 1] <- paste0("1 / ", round(runtimes_CHRIS_sum$fold_change_napy_comp[runtimes_CHRIS_sum$method == "Pearson" & runtimes_CHRIS_sum$threads == 1], 2))
 
 
 ggplot(runtimes_CHRIS_sum, aes(x = threads, y = method, fill = log_fold_change, label = label)) + 
   geom_tile(color ="black") + 
   geom_label(color = "black", fill = "white", alpha = 0.7) + 
-  labs( x = "Number of Threads", y = "Statistical Test", fill = "Log10(Runtime Fastest Competitor / Runtime NApy)") +
+  labs( x = "Number of Threads", y = "Statistical Test", fill = expression(paste(Log[10], "(Runtime Fastest Competitor / Runtime NApy)"))) +
   theme_bw() + theme_new + theme(legend.position= "top") +
   scale_y_discrete(labels = function(labels) {
   ifelse(

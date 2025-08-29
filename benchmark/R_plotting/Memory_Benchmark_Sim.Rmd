@@ -34,7 +34,7 @@ out_dir <- "../plots/"
 
 
 ## ----- Theme -----
-theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14), strip.background = element_rect(fill = "white"))
+theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 12), axis.title.y = element_text(size = 12), legend.text = element_text(size = 12), legend.title = element_text(size = 12), strip.text = element_text(size = 12), strip.background = element_rect(fill = "white"))
 
 ## ----- Helper Function -----
 
@@ -229,15 +229,24 @@ tmp <- memory_dt_napy %>% mutate(method = recode_factor(method,
                                               "Kruskal-Wallis" = "Kruskal-Wallis",
                                               "Chi-squared" = "chi^2~-Test"))
 
-#tmp$method <- factor(tmp$method, levels = c("Pearson", "italic(t)~-Test", "ANOVA", "chi^2~-Test", "Spearman", "Mann-Whitney~italic(U)","Kruskal-Wallis"))
+tmp$method <- factor(tmp$method, levels = c("Pearson", "italic(t)~-Test", "ANOVA", "chi^2~-Test", "Spearman", "Mann-Whitney~italic(U)","Kruskal-Wallis"))
 
 
-ggplot(tmp[tmp$samples == 1000 & tmp$features == 1000,], aes(x = as.factor(threads), y = mean_mem, fill = library)) + 
+memory_c_numba_plot <- ggplot(tmp[tmp$samples == 1000 & tmp$features == 1000,], aes(x = as.factor(threads), y = mean_mem, fill = library)) + 
   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) + geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem), width = 0.2, position = position_dodge(width = 0.9)) +
-  facet_wrap(~method, ncol = 7, label = "label_parsed", scales = "free_y") + 
-  theme_bw() + scale_fill_manual(values = library_colors) + labs(x = "Threads", y = "Mean Peak Resident Memory (MB)", fill = "Library") + theme_new + theme(strip.background = element_rect(fill = "white"), legend.position = "bottom")
+  facet_wrap(~method, ncol = 4, label = "label_parsed", scales = "free_y") + 
+  theme_bw() + scale_fill_manual(values = library_colors, labels = c("C++", "Numba")) + labs(x = "Number of Threads", y = "Mean Peak Resident Memory (MB)", fill = "NApy Version") + theme_new + theme(strip.background = element_rect(fill = "white"), legend.position = "top")
 
-ggsave(paste0(out_dir, "peak_memory_napy_numba_c++.png"), width = 15, height = 4, dpi = 300)
+ggsave(paste0(out_dir, "peak_memory_napy_numba_c++.png"), width = 10, height = 8, dpi = 300)
+```
+
+
+Wrap with runtime plot together:
+
+```{r}
+wrap_elements(runtime_c_numba_plot) / wrap_elements(memory_c_numba_plot) + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(1, 1.5), axes = "keep") & theme(legend.position = "top", plot.tag = element_text(size = 20, face = "bold")) 
+
+ggsave(paste0(out_dir, "runtime_memory_napy_numba_c++.png"), width = 9, height = 11, dpi = 300)
 
 ```
 
@@ -275,38 +284,5 @@ ggplot(tmp, aes(x = as.factor(threads), y = mean_mem, fill = library)) + geom_ba
   facet_wrap(~method, scales="free_y", ncol = 7, label = "label_parsed") + theme_bw() + labs(x = "Threads", y= "Mean Peak Resident Memory (MB)", fill = "Library") + scale_fill_manual(values = library_colors) + theme(strip.background = element_rect(fill = "white"), legend.position = "bottom") + guides(fill = guide_legend(nrow = 1))
 
 ggsave(paste0(out_dir, "peak_memory_napy_competitors.png"), width = 12, height = 4, dpi = 300)
-
-```
-
-
-```{r}
-p <- ggplot(tmp, aes(x = library, y = mean_mem, fill = threads)) + geom_bar(stat="identity", position = "dodge") + facet_grid(.~method, scales="free", space = "free", label = "label_parsed") + theme_bw() + labs(x = "Library", y= "Mean Peak Resident Memory (MB)", fill = "Threads") + scale_fill_manual(values = c("#ccd7ed","#99b0db", "#4d74c1", "#0039ab")) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + theme(strip.background = element_rect(fill = "white"), legend.position = "bottom") + guides(fill = guide_legend(nrow = 1))
-p
-
-```
-
-
-```{r}
-p_thread_1 <- ggplot(tmp[tmp$threads == 1,], aes(x = library, y = mean_mem, fill = library)) + geom_bar(stat = "identity") + facet_grid(.~method, scales = "free_x", space = "free", label = "label_parsed") + theme_bw() + scale_fill_manual(values = library_colors) + labs(x = "Library", y = "Mean Peak Resident Memory (in MB)", fill = "Library") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(strip.background = element_rect(fill = "white"), legend.position = "bottom") +  + guides(fill = guide_legend(nrow = 1))
-p_thread_1     
-```
-
-```{r}
-p_threads <- ggplot(memory_dt[!memory_dt$library %in% c("Pingouin", "pandas", "SciPy"),], aes(x = library, y = mean_mem, fill = threads)) + geom_bar(stat = "identity", position = "dodge") + facet_grid(.~method, scales = "free_x", space = "free") + theme_bw() + labs(x = "Library", y = "Mean Peak Memory (in MB)", fill = "Threads") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_fill_brewer(palette = "Blues")
-p_threads
-```
-
-
-```{r}
-p_thread_1 / p_threads
-
-
-```
-
-```{r}
-mem_table <- as.data.table(memory_dt[, c("threads", "library", "method", "mean_mem")])
-mem_table$mean_mem <- round(mem_table$mean_mem, 3)
-mem_table_wide <- dcast(mem_table, library + threads ~ method, value.var = "mean_mem")
-write.csv(mem_table_wide, paste0(out_dir, "peak_memory.csv"))
 
 ```
