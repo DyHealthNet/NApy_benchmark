@@ -1216,7 +1216,7 @@ class TestMWU(unittest.TestCase):
         pvalue_r = res.rx['p.value'][0][0]
         z_value = qnorm(pvalue_r/2)
         z_value = z_value[0]
-        eff_size_r = z_value / root(8)
+        eff_size_r = abs(z_value) / root(8)
         eff_size_r = eff_size_r[0]
 
         # Call napy effect size calculation.
@@ -1243,7 +1243,7 @@ class TestMWU(unittest.TestCase):
         pvalue_r = res.rx['p.value'][0][0]
         z_value = qnorm(pvalue_r / 2)
         z_value = z_value[0]
-        eff_size_r = z_value / root(8)
+        eff_size_r = abs(z_value) / root(8)
         eff_size_r = eff_size_r[0]
 
         # Call napy effect size calculation.
