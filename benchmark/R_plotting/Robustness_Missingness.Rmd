@@ -18,15 +18,9 @@ for(package in required_packages){
   library(package, character.only = TRUE, quietly = TRUE)
 }
 
-## ----- Colors -----
-
-library_colors <- c("NApy" = "#5b87ab", "SciPy" = "#018571", "SciPy - Python Loop" = "#80CDC1" , "pandas" = "#C01C8B", "Pingouin - Python Loop" = "#B2182B", "Pingouin" = "#F4A582","pandas - Python Loop" = "#F1B6DA", "NApy with Numba" = "#203f58", "NApy with C++" = "#acbed2")
-
 ## ----- Methods Sorting -----
 
-method_sorting <-  c("Pearson", "Spearman", "T-Test", "Mann-Whitney U", "ANOVA", "Kruskal-Wallis", "Chi2")
-library_sorting <- c("NApy", "Pingouin", "SciPy", "pandas", "SciPy - Python Loop", "pandas - Python Loop")
-ncol <- 4
+method_sorting <-  c("Pearson", "Spearman", "t-test", "Mann-Whitney-U", "ANOVA", "Kruskal-Wallis", "Chi-squared")
 
 ## ----- Paths -----
 input_dir <- "../../robustness/"
@@ -35,38 +29,65 @@ out_dir <- "../plots/"
 
 ## ----- Theme -----
 theme_new <- theme(legend.position = "bottom", axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14), legend.text = element_text(size = 12), legend.title = element_text(size = 14), strip.text = element_text(size = 14), strip.background = element_rect(fill = "white"))
+
+rename_data <- function(dt){
+  # Rename methods
+  dt$method <- gsub("pearson", "Pearson", dt$method)
+  dt$method <- gsub("ttest", "t-test", dt$method)
+  dt$method <- gsub("anova", "ANOVA", dt$method)
+  dt$method <- gsub("chi2", "Chi-squared", dt$method)
+  dt$method <- gsub("spearman", "Spearman", dt$method)
+  dt$method <- gsub("mwu", "Mann-Whitney-U", dt$method)
+  dt$method <- gsub("kruskal", "Kruskal-Wallis", dt$method)
+  dt$method <- factor(dt$method, levels = method_sorting)
+  
+  return(dt)
+}
 ```
+
+
 
 # Robustness Continuous - Continuous
 
 ## Reading Files and Preprocess Data
 
 ```{r}
-dt <- fread(paste0(input_dir, "stability_analysis_cont_cont.csv"))
-dt <- dt %>% mutate(test = recode(test, "pearson" = "Pearson", "spearman" = "Spearman")) %>% as.data.table()
+robust_dt <- NULL
+for(file in list.files(input_dir, pattern = "stability_analysis")){
+  dt <- fread(paste0(input_dir, file))
+  if(is.null(runtime_dt)){
+    robust_dt <- dt
+  } else {
+    robust_dt <- rbind(robust_dt, dt)
+  }
+}
+
+robust_dt$method <- robust_dt$test
+robust_dt <- rename_data(robust_dt)
 ```
+
+
 
 ## Plot Data
 
 P-value 
 
 ```{r}
-plot_pval <- ggplot(dt, aes( x= as.factor(na_ratio), y = -log10(pvalue), fill = mechanism)) + geom_violin(width = 0.7, alpha = 0.5) + geom_boxplot(width = 0.2, position = position_dodge(width=0.7)) + theme_bw() + theme_new + facet_wrap(~test) +
+plot_pval <- ggplot(robust_dt, aes( x= as.factor(na_ratio), y = -log10(pvalue), fill = mechanism)) + geom_violin(width = 0.7, alpha = 0.5) + geom_boxplot(width = 0.2, position = position_dodge(width=0.7)) + theme_bw() + theme_new + facet_wrap(~method, scales="free_y", ncol = 1) +
   labs(x = "Missing Value Ratio", fill = "Missingness Mechanism") + ylab(expression(-log[10](italic(P)-value))) + theme(legend.position = "top")
 ```
 
 Effect Size
 
 ```{r}
-plot_effect_size <- ggplot(dt, aes( x= as.factor(na_ratio), y = effect_size, fill = mechanism)) + geom_violin(width = 0.7, alpha = 0.5) + geom_boxplot(width = 0.2, position = position_dodge(width=0.7)) + theme_bw() + theme_new + facet_wrap(~test) +
-  labs(x = "Missing Value Ratio", fill = "Missingness Mechanism", y = "Effect Size") +
-  theme(legend.position = "top")
+plot_effect_size <- ggplot(robust_dt, aes( x= as.factor(na_ratio), y = effect_size, fill = mechanism)) + geom_violin(width = 0.7, alpha = 0.5) + geom_boxplot(width = 0.2, position = position_dodge(width=0.7)) + theme_bw() + theme_new + facet_wrap(~method, scales="free_y", ncol = 1) +
+  labs(x = "Missing Value Ratio", fill = "Missingness Mechanism") + ylab("Effect Size") + theme(legend.position = "top")
 ```
 
 Both Plots Together
 
 ```{r}
-plot_pval + plot_effect_size + plot_layout(ncol = 1, guides = "collect", axes = "collect") + plot_annotation(tag_levels = "A") & theme(legend.position = 'top', plot.tag = element_text(size = 20, face = "bold")) 
-ggsave(paste0(out_dir, "robustness_cont_cont.png"), width = 12, height = 10)
+plot_pval + plot_effect_size + plot_layout(ncol = 2, guides = "collect", axes = "collect") + plot_annotation(tag_levels = "A") & theme(legend.position = 'bottom', plot.tag = element_text(size = 20, face = "bold")) 
+ggsave(paste0(out_dir, "robustness_missingness.png"), width = 12, height = 20)
 ```
 

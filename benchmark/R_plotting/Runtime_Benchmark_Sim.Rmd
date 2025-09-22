@@ -417,57 +417,65 @@ write.csv(runtime_recoded, paste0(out_dir, "runtime_thread_sample_feature_effect
 
 ```{r}
 input_dir <- "../results/na_ratios/"
-na_runtime_dt <- NULL
-for(file in list.files(input_dir, pattern = "_updated")){
-  dt <- read_runtime_files(paste0(input_dir, file))
-  dt$file <- file
-  if(is.null(na_runtime_dt)){
-    na_runtime_dt <- dt
-  } else {
-    na_runtime_dt <- rbind(na_runtime_dt, dt)
+
+read_NA_files <- function(input_dir, pattern = "_updated", missing_mechanism = "MCAR"){
+  na_runtime_dt <- NULL
+  for(file in list.files(input_dir, pattern = pattern)){
+    dt <- read_runtime_files(paste0(input_dir, file))
+    dt$file <- file
+    if(is.null(na_runtime_dt)){
+      na_runtime_dt <- dt
+    } else {
+      na_runtime_dt <- rbind(na_runtime_dt, dt)
+    }
   }
+  
+  na_runtime_dt$mechanism <- missing_mechanism
+  
+  # Rename libraries
+  
+  na_runtime_dt$library <- gsub("numba", "Numba", na_runtime_dt$library)
+  na_runtime_dt$library <- gsub("nanpy", "C++", na_runtime_dt$library)
+  
+  # Rename methods
+  na_runtime_dt$method <- gsub("pearson", "Pearson", na_runtime_dt$method)
+  na_runtime_dt$method <- gsub("ttest", "t-test", na_runtime_dt$method)
+  na_runtime_dt$method <- gsub("anova", "ANOVA", na_runtime_dt$method)
+  na_runtime_dt$method <- gsub("chi2", "Chi-squared", na_runtime_dt$method)
+  na_runtime_dt$method <- gsub("spearman", "Spearman", na_runtime_dt$method)
+  na_runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", na_runtime_dt$method)
+  na_runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", na_runtime_dt$method)
+  
+  na_runtime_dt$method <- factor(na_runtime_dt$method, levels = method_sorting)
+  return(na_runtime_dt)
 }
 
-# Rename libraries
+```
 
-na_runtime_dt$library <- gsub("nanpy", "NApy", na_runtime_dt$library)
-na_runtime_dt$library <- gsub("scipy", "SciPy", na_runtime_dt$library)
-na_runtime_dt$library <- gsub("pingouin", "Pingouin", na_runtime_dt$library)
-na_runtime_dt$library[na_runtime_dt$library == "SciPypar"] <- "SciPy - Python Loop"
-na_runtime_dt$library[na_runtime_dt$library == "pandaspar"] <- "pandas - Python Loop"
-na_runtime_dt$library[na_runtime_dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
+```{r}
 
-# Rename methods
-na_runtime_dt$method <- gsub("pearson", "Pearson", na_runtime_dt$method)
-na_runtime_dt$method <- gsub("ttest", "t-test", na_runtime_dt$method)
-na_runtime_dt$method <- gsub("anova", "ANOVA", na_runtime_dt$method)
-na_runtime_dt$method <- gsub("chi2", "Chi-squared", na_runtime_dt$method)
-na_runtime_dt$method <- gsub("spearman", "Spearman", na_runtime_dt$method)
-na_runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", na_runtime_dt$method)
-na_runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", na_runtime_dt$method)
+MCAR_dt <- read_NA_files(input_dir, pattern = "_updated", missing_mechanism = "MCAR")
+MAR_dt <- read_NA_files(input_dir, pattern = "_MAR", missing_mechanism = "MAR")
+MNAR_dt <- read_NA_files(input_dir, pattern = "_MNAR", missing_mechanism = "MNAR")
 
-na_runtime_dt$method <- factor(na_runtime_dt$method, levels = method_sorting)
+missing_dt <- rbind(MCAR_dt, MAR_dt, MNAR_dt)
+
+
+
 ```
 
 
 ```{r}
-# Extract numba and NApy
-na_runtime_dt_napy <- na_runtime_dt[na_runtime_dt$library %in% c("NApy", "numba"),]
-
-na_runtime_dt_napy$library[na_runtime_dt_napy$library == "numba"] <- "NApy with Numba"
-na_runtime_dt_napy$library[na_runtime_dt_napy$library == "NApy"] <- "NApy with C++"
 
 ## ----- For parametric libraries -> make numba -> NApy -----
-new_napy_param <- na_runtime_dt_napy[na_runtime_dt_napy$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & na_runtime_dt_napy$library == "NApy with Numba",]
-new_napy_param$library <- "NApy"
-new_napy_non_param <- na_runtime_dt_napy[na_runtime_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney-U") & na_runtime_dt_napy$library == "NApy with C++",]
-new_napy_non_param$library <- "NApy"
+new_missing_param <- missing_dt[missing_dt$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & missing_dt$library == "Numba",]
+new_missing_param$library <- "NApy"
+new_missing_non_param <- missing_dt[missing_dt$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney-U") & missing_dt$library == "C++",]
+new_missing_non_param$library <- "NApy"
 
-na_runtime_dt <- na_runtime_dt[!na_runtime_dt$library %in% c("NApy", "numba"),]
-na_runtime_dt <- rbind(new_napy_param, new_napy_non_param, na_runtime_dt)
+na_runtime_dt <- rbind(new_missing_param, new_missing_non_param)
 
 na_runtime_dt$method <- factor(na_runtime_dt$method, levels = method_sorting)
-na_runtime_dt$library <- factor(na_runtime_dt$library, levels = library_sorting)
 
 na_runtime_dt <- na_runtime_dt %>% mutate(method = recode_factor(method, 
                                               "Pearson"="Pearson", 
@@ -478,10 +486,23 @@ na_runtime_dt <- na_runtime_dt %>% mutate(method = recode_factor(method,
                                               "Kruskal-Wallis" = "Kruskal-Wallis",
                                               "Chi-squared" = "chi^2~-Test"))
 
-ggplot(na_runtime_dt, aes(x = na_ratio, y = mean_time, color = method)) +  geom_point(size = 3, alpha = 0.7) + geom_line(aes(group = method), alpha = 0.7) + geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.02) +
+ggplot(na_runtime_dt[na_runtime_dt$mechanism == "MCAR",], aes(x = na_ratio, y = mean_time, color = method)) +  geom_point(size = 3, alpha = 0.7) + geom_line(aes(group = method), alpha = 0.7) + geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.02) +
   theme_bw() +
   scale_color_brewer(palette = "Paired", labels = scales::parse_format()) + labs(x = "Missing Value Ratio", y = "Mean Runtime (s)", color = "Statistical Test") + theme_new + theme(legend.position = "right")
 
 ggsave(paste0(out_dir, "na_ratio.png"), width = 7, height = 4, dpi = 300)
+
+```
+
+```{r}
+
+na_runtime_dt$mechanism <- factor(na_runtime_dt$mechanism, levels = c("MCAR", "MAR", "MNAR"))
+ggplot(na_runtime_dt[na_runtime_dt$mechanism %in% c("MAR", "MNAR"),], aes(x = na_ratio, y = mean_time, color = method)) +  geom_point(size = 3, alpha = 0.7) + geom_line(aes(group = method), alpha = 0.7) + geom_errorbar(aes(ymin = mean_time - sd_time, ymax = mean_time + sd_time), width = 0.02) + facet_wrap(~mechanism)+
+  theme_bw() +
+  scale_color_brewer(palette = "Paired", labels = scales::parse_format()) + labs(x = "Missing Value Ratio", y = "Mean Runtime (s)", color = "Statistical Test") + theme_new + theme(legend.position = "right", strip.background = element_rect(fill = "white"))
+
+ggsave(paste0(out_dir, "na_ratio_per_mechanism.png"), width = 12, height = 4, dpi = 300)
+
+```
 
 ```
