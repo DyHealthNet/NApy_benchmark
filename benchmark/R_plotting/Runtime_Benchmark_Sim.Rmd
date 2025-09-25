@@ -24,7 +24,7 @@ library_colors <- c("NApy" = "#5b87ab", "SciPy" = "#018571", "SciPy - Python Loo
 
 ## ----- Methods Sorting -----
 
-method_sorting <-  c("Pearson", "Spearman", "t-test", "Mann-Whitney-U", "ANOVA", "Kruskal-Wallis", "Chi-squared")
+method_sorting <-  c("Pearson", "Spearman", "t-test", "Mann-Whitney U", "ANOVA", "Kruskal-Wallis", "Chi-squared")
 library_sorting <- c("NApy", "Pingouin", "SciPy", "pandas", "SciPy - Python Loop", "pandas - Python Loop")
 ncol <- 4
 
@@ -47,29 +47,35 @@ read_runtime_files <- function(file_path, average = TRUE){
   return(dt)
 }
 
-rename_data <- function(runtime_dt){
-  runtime_dt$threads <- as.factor(runtime_dt$threads)
-  runtime_dt$features <- as.factor(runtime_dt$features)
-  runtime_dt$samples <- as.factor(runtime_dt$samples)
+rename_data <- function(dt){
+  dt$threads <- as.factor(dt$threads)
+  dt$features <- as.factor(dt$features)
+  dt$samples <- as.factor(dt$samples)
   # Rename libraries
-  runtime_dt$library <- gsub("nanpy", "NApy", runtime_dt$library)
-  runtime_dt$library <- gsub("scipy", "SciPy", runtime_dt$library)
-  runtime_dt$library <- gsub("pingouin", "Pingouin", runtime_dt$library)
-  runtime_dt$library[runtime_dt$library == "SciPypar"] <- "SciPy - Python Loop"
-  runtime_dt$library[runtime_dt$library == "pandaspar"] <- "pandas - Python Loop"
-  runtime_dt$library[runtime_dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
+  dt$library <- gsub("nanpy", "NApy with C++", dt$library)
+  dt$library <- gsub("napy_cpp", "NApy with C++", dt$library)
+  dt$library <- gsub("numba", "NApy with Numba", dt$library)
+  dt$library <- gsub("napy_numba", "NApy with Numba", dt$library)
+  dt$library[dt$library == "scipy_par"] <- "SciPy - Python Loop"
+  dt$library <- gsub("scipy", "SciPy", dt$library)
+  dt$library <- gsub("pingouin", "Pingouin", dt$library)
+  dt$library[dt$library == "SciPypar"] <- "SciPy - Python Loop"
+  dt$library[dt$library == "pandas_par"] <- "pandas - Python Loop"
+  dt$library[dt$library == "pandaspar"] <- "pandas - Python Loop"
+  dt$library[dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
   # Rename methods
-  runtime_dt$method <- gsub("pearson", "Pearson", runtime_dt$method)
-  runtime_dt$method <- gsub("ttest", "t-test", runtime_dt$method)
-  runtime_dt$method <- gsub("anova", "ANOVA", runtime_dt$method)
-  runtime_dt$method <- gsub("chi2", "Chi-squared", runtime_dt$method)
-  runtime_dt$method <- gsub("spearman", "Spearman", runtime_dt$method)
-  runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", runtime_dt$method)
-  runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", runtime_dt$method)
-  runtime_dt$method <- factor(runtime_dt$method, levels = method_sorting)
-  
-  return(runtime_dt)
-}
+  dt$method <- gsub("pearson", "Pearson", dt$method)
+  dt$method <- gsub("ttest", "t-test", dt$method)
+  dt$method <- gsub("anova", "ANOVA", dt$method)
+  dt$method <- gsub("chi2", "Chi-squared", dt$method)
+  dt$method <- gsub("spearman", "Spearman", dt$method)
+  dt$method <- gsub("mwu", "Mann-Whitney U", dt$method)
+  dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", dt$method)
+  dt$method <- gsub("kw", "Kruskal-Wallis", dt$method)
+  dt$method <- gsub("kruskal", "Kruskal-Wallis", dt$method)
+  dt$method <- factor(dt$method, levels = method_sorting)
+  return(dt)
+}  
 ```
 
 # Reading Files and Preprocess Data
@@ -90,29 +96,27 @@ for(file in list.files(input_dir, pattern = "simulated_")){
 runtime_dt <- rename_data(runtime_dt)
 ```
 
-
-# Numba vs. C++ 
+# NApy Numba vs. NApy C++ 
 
 ```{r}
 # Extract numba and NApy
-runtime_dt_napy <- runtime_dt[runtime_dt$library %in% c("NApy", "numba"),]
+runtime_dt_napy <- runtime_dt[runtime_dt$library %in% c("NApy with Numba", "NApy with C++"),]
 
-runtime_dt_napy$library[runtime_dt_napy$library == "numba"] <- "NApy with Numba"
-runtime_dt_napy$library[runtime_dt_napy$library == "NApy"] <- "NApy with C++"
 
-# Extract numba and NApy
+# Extract numba and NApy for 1000 samples and features
 tmp <- runtime_dt_napy[runtime_dt_napy$features == 1000 & runtime_dt_napy$samples == 1000,]
 tmp <- tmp[, c("threads", "method", "mean_time", "library")]
+
 # Calculate for each thread and method combination, the fold change over the library (numba - C++)
 tmp <- tmp %>% group_by(threads, method) %>% summarize(fold_change_c_numba = mean_time[library == "NApy with C++"] / mean_time[library == "NApy with Numba"], fold_change_numba_c = mean_time[library == "NApy with Numba"] / mean_time[library == "NApy with C++"], .groups = "drop")
 
 tmp$method <- factor(tmp$method, levels = rev(levels(tmp$method)))
 
 tmp$fold_change <- tmp$fold_change_c_numba
-tmp$fold_change[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis", "Chi-squared")]
+tmp$fold_change[tmp$method %in% c("Spearman", "Mann-Whitney U", "Kruskal-Wallis")] <- tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney U", "Kruskal-Wallis")]
 
 tmp$winner_label <- paste0(round(tmp$fold_change_c_numba, 2), " / 1")
-tmp$winner_label[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- paste0("1 / ", round(tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")],2))
+tmp$winner_label[tmp$method %in% c("Spearman", "Mann-Whitney U", "Kruskal-Wallis")] <- paste0("1 / ", round(tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney U", "Kruskal-Wallis")],2))
   
 
 tmp$label <- paste0(round(tmp$fold_change_c_numba,2), " (", round(tmp$fold_change,2), ")")
@@ -133,7 +137,7 @@ runtime_c_numba_plot <- ggplot(tmp, aes(x = threads, y = method, fill = log10(fo
     ifelse(
       labels == "t-test", expression(italic(t) ~ "-Test"),
       ifelse(
-        labels == "Mann-Whitney-U", expression("Mann-Whitney" ~ italic(U)),
+        labels == "Mann-Whitney U", expression("Mann-Whitney" ~ italic(U)),
         labels
       )
     )
@@ -149,58 +153,6 @@ runtime_c_numba_plot <- ggplot(tmp, aes(x = threads, y = method, fill = log10(fo
 ggsave(paste0(out_dir, "numba_C_fold_change.png"), width = 9, height = 5, dpi = 300)
 ```
 
-```{r}
-
-tmp$winner_label <- paste0("x ", round(tmp$fold_change_c_numba, 2))
-tmp$winner_label[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- paste0("x ",  round(tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")],2))
-
-
-tmp$label_pos <- log10(tmp$fold_change_c_numba)
-tmp$label_pos[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] <- tmp$label_pos[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")] - 0.27
-  
-
-p <- ggplot(tmp, aes(y = method, color = factor(threads))) +
-  
-  # lollipop sticks (horizontal lines)
-  geom_segment(aes(x = 0, xend = log10(fold_change_c_numba), 
-                   y = as.numeric(method) + 
-                       (as.numeric(factor(threads)) - 2.5) * 0.15,  # manual offset
-                   yend = as.numeric(method) + 
-                          (as.numeric(factor(threads)) - 2.5) * 0.15),
-               alpha = 0.5) +
-  
-  # points with the same offset
-  geom_point(aes(x = log10(fold_change_c_numba), 
-                 y = as.numeric(method) + 
-                     (as.numeric(factor(threads)) - 2.5) * 0.15),
-             size = 2) +
-  
-   # labels
-  geom_text(aes(x = label_pos, 
-                y = as.numeric(method) + (as.numeric(threads) - mean(as.numeric(threads))) * 0.15, 
-                label = winner_label),
-            hjust = -0.2,   # push a bit to the right of the dot
-            size = 3) +
-  
-  
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_y_continuous(breaks = seq_along(levels(tmp$method)), 
-                     labels = levels(tmp$method)) +
-  labs(x = "Log10(Runtime C++ / Runtime Numba)",
-       y = "Statistical Test",
-       color = "Threads", shape = "Threads") +
-  scale_x_continuous(limits = c(-max(abs(tmp$label_pos)), max(abs(tmp$label_pos)))) + 
-  scale_color_brewer(palette = "Set2") +
-  theme_bw() +
-  ggtitle("C++      Numba") +
-  theme(plot.title = element_text(hjust = 0.5))
-
-ggsave(paste0(out_dir, "numba_C_fold_change_dumbbell.png"), width = 8, height = 4, dpi = 300)
-
-```
-
-
-
 
 Update table with default NApy implementation
 
@@ -208,10 +160,10 @@ Update table with default NApy implementation
 ## ----- For parametric libraries -> make numba -> NApy -----
 new_napy_param <- runtime_dt_napy[runtime_dt_napy$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & runtime_dt_napy$library == "NApy with Numba",]
 new_napy_param$library <- "NApy"
-new_napy_non_param <- runtime_dt_napy[runtime_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney-U") & runtime_dt_napy$library == "NApy with C++",]
+new_napy_non_param <- runtime_dt_napy[runtime_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney U") & runtime_dt_napy$library == "NApy with C++",]
 new_napy_non_param$library <- "NApy"
 
-runtime_dt <- runtime_dt[!runtime_dt$library %in% c("NApy", "numba"),]
+runtime_dt <- runtime_dt[!runtime_dt$library %in% c("NApy with C++", "NApy with Numba"),]
 runtime_dt <- rbind(new_napy_param, new_napy_non_param, runtime_dt)
 
 runtime_dt$method <- factor(runtime_dt$method, levels = method_sorting)
@@ -224,7 +176,6 @@ runtime_dt$library <- factor(runtime_dt$library, levels = library_sorting)
 ## Threads
 
 ```{r}
-
 runtime_threads <- runtime_dt[runtime_dt$samples == 1000 & runtime_dt$features == 1000,]
 
 dt_pandas <- runtime_threads[runtime_threads$method %in% c("Pearson", "Spearman") & runtime_threads$library == "pandas",]
@@ -239,15 +190,12 @@ dt_64$threads <- as.factor(64)
 runtime_threads <- rbind(runtime_threads, dt_4, dt_16, dt_64)
 runtime_threads$pandas <- ifelse(runtime_threads$library == "pandas", TRUE, FALSE)
 
-#tmp <- runtime_threads[runtime_threads$method %in% c("Pearson", "Spearman", "t-test", "Mann-Whitney-U"),]
-#tmp$method <- factor(tmp$method, levels = c("Pearson", "Spearman", "t-test", "Mann-Whitney-U"))
-
 
 runtime_threads_recoded <- runtime_threads %>% mutate(method = recode_factor(method, 
                                               "Pearson"="Pearson", 
                                               "Spearman"="Spearman",
                                               "t-test" = "italic(t)~-Test",
-                                              "Mann-Whitney-U" = "Mann-Whitney~italic(U)",
+                                              "Mann-Whitney U" = "Mann-Whitney~italic(U)",
                                               "ANOVA" = "ANOVA",
                                               "Kruskal-Wallis" = "Kruskal-Wallis",
                                               "Chi-squared" = "chi^2~-Test"))
@@ -312,7 +260,7 @@ plot_magnitude_heatmap <- function(dt, column = "threads", xlab = "Number of Thr
     ifelse(
       labels == "t-test", expression(italic(t) ~ "-Test"),
       ifelse(
-        labels == "Mann-Whitney-U", expression("Mann-Whitney" ~ italic(U)),
+        labels == "Mann-Whitney U", expression("Mann-Whitney" ~ italic(U)),
         labels
       )
     )
@@ -335,7 +283,7 @@ runtime_samples_features_recoded <- runtime_samples_features %>% mutate(method =
                                               "Pearson"="Pearson", 
                                               "Spearman"="Spearman",
                                               "t-test" = "italic(t)~-Test",
-                                              "Mann-Whitney-U" = "Mann-Whitney~italic(U)",
+                                              "Mann-Whitney U" = "Mann-Whitney~italic(U)",
                                               "ANOVA" = "ANOVA",
                                               "Kruskal-Wallis" = "Kruskal-Wallis",
                                               "Chi-squared" = "chi^2~-Test"))
@@ -393,7 +341,7 @@ ggsave(paste0(out_dir, "runtime_thread_sample_feature_effect.png"), width = 17, 
 ```
 
 
-## Supplementary Table
+## Supplementary Table of NApy Runtimes
 
 ```{r}
 runtime_threads_recoded <- runtime_threads_recoded[runtime_threads_recoded$library == "NApy",]
@@ -443,7 +391,7 @@ read_NA_files <- function(input_dir, pattern = "_updated", missing_mechanism = "
   na_runtime_dt$method <- gsub("anova", "ANOVA", na_runtime_dt$method)
   na_runtime_dt$method <- gsub("chi2", "Chi-squared", na_runtime_dt$method)
   na_runtime_dt$method <- gsub("spearman", "Spearman", na_runtime_dt$method)
-  na_runtime_dt$method <- gsub("mwu", "Mann-Whitney-U", na_runtime_dt$method)
+  na_runtime_dt$method <- gsub("mwu", "Mann-Whitney U", na_runtime_dt$method)
   na_runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", na_runtime_dt$method)
   
   na_runtime_dt$method <- factor(na_runtime_dt$method, levels = method_sorting)
@@ -459,9 +407,6 @@ MAR_dt <- read_NA_files(input_dir, pattern = "_MAR", missing_mechanism = "MAR")
 MNAR_dt <- read_NA_files(input_dir, pattern = "_MNAR", missing_mechanism = "MNAR")
 
 missing_dt <- rbind(MCAR_dt, MAR_dt, MNAR_dt)
-
-
-
 ```
 
 
@@ -470,7 +415,7 @@ missing_dt <- rbind(MCAR_dt, MAR_dt, MNAR_dt)
 ## ----- For parametric libraries -> make numba -> NApy -----
 new_missing_param <- missing_dt[missing_dt$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & missing_dt$library == "Numba",]
 new_missing_param$library <- "NApy"
-new_missing_non_param <- missing_dt[missing_dt$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney-U") & missing_dt$library == "C++",]
+new_missing_non_param <- missing_dt[missing_dt$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney U") & missing_dt$library == "C++",]
 new_missing_non_param$library <- "NApy"
 
 na_runtime_dt <- rbind(new_missing_param, new_missing_non_param)
@@ -481,7 +426,7 @@ na_runtime_dt <- na_runtime_dt %>% mutate(method = recode_factor(method,
                                               "Pearson"="Pearson", 
                                               "Spearman"="Spearman",
                                               "t-test" = "italic(t)~-Test",
-                                              "Mann-Whitney-U" = "Mann-Whitney~italic(U)",
+                                              "Mann-Whitney U" = "Mann-Whitney~italic(U)",
                                               "ANOVA" = "ANOVA",
                                               "Kruskal-Wallis" = "Kruskal-Wallis",
                                               "Chi-squared" = "chi^2~-Test"))
@@ -504,5 +449,82 @@ ggplot(na_runtime_dt[na_runtime_dt$mechanism %in% c("MAR", "MNAR"),], aes(x = na
 ggsave(paste0(out_dir, "na_ratio_per_mechanism.png"), width = 12, height = 4, dpi = 300)
 
 ```
+
+# Hardware Comparison
+
+Read data of FAU server
+
+```{r}
+# Read data summarized
+input_dir <- "../results/runtime/"
+
+runtime_fau_dt <- NULL
+for(file in list.files(input_dir, pattern = "runtime_")){
+  dt <- read_runtime_files(paste0(input_dir, file))
+  dt$file <- file
+  if(is.null(runtime_fau_dt)){
+    runtime_fau_dt <- dt
+  } else {
+    runtime_fau_dt <- rbind(runtime_fau_dt, dt)
+  }
+}
+
+runtime_fau_dt <- rename_data(runtime_fau_dt)
+```
+
+Create the same heatmap comparing C++ and NApy
+
+```{r}
+# Extract numba and NApy
+runtime_fau_dt_napy <- runtime_fau_dt[runtime_fau_dt$library %in% c("NApy with C++", "NApy with Numba"),]
+
+# Extract numba and NApy
+tmp <- runtime_fau_dt_napy[runtime_fau_dt_napy$features == 1000 & runtime_fau_dt_napy$samples == 1000,]
+tmp <- tmp[, c("threads", "method", "mean_time", "library")]
+# Calculate for each thread and method combination, the fold change over the library (numba - C++)
+tmp <- tmp %>% group_by(threads, method) %>% summarize(fold_change_c_numba = mean_time[library == "NApy with C++"] / mean_time[library == "NApy with Numba"], fold_change_numba_c = mean_time[library == "NApy with Numba"] / mean_time[library == "NApy with C++"], .groups = "drop")
+
+tmp$method <- factor(tmp$method, levels = rev(levels(tmp$method)))
+
+tmp$fold_change <- tmp$fold_change_c_numba
+tmp$fold_change[tmp$method %in% c("Spearman", "Mann-Whitney U", "Kruskal-Wallis")] <- tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")]
+
+tmp$winner_label <- paste0(round(tmp$fold_change_c_numba, 2), " / 1")
+tmp$winner_label[tmp$method %in% c("Spearman", "Mann-Whitney U", "Kruskal-Wallis")] <- paste0("1 / ", round(tmp$fold_change_numba_c[tmp$method %in% c("Spearman", "Mann-Whitney-U", "Kruskal-Wallis")],2))
+  
+
+tmp$label <- paste0(round(tmp$fold_change_c_numba,2), " (", round(tmp$fold_change,2), ")")
+
+
+runtime_fau_c_numba_plot <- ggplot(tmp, aes(x = threads, y = method, fill = log10(fold_change_c_numba), label = winner_label)) + 
+  geom_tile(color ="black") + geom_label(color = "black", fill = "white", alpha = 0.7) + 
+  theme_bw() + labs(x = "Number of Threads", 
+                    y = "Statistical Test", 
+                    fill = expression(paste(Log[10], "(Runtime C++ / Runtime Numba)"))) +
+  guides(color = "none")  + 
+  scale_fill_gradient2(low = "#B2182B", high = "#2166AC", mid = "white", midpoint = 0, 
+                       limits = c(-max(abs(log10(tmp$fold_change_c_numba))), max(abs(log10(tmp$fold_change_c_numba))))) + 
+  theme_new + theme(legend.position= "top") +
+  scale_y_discrete(labels = function(labels) {
+  ifelse(
+    labels == "Chi-squared", expression(chi^2 ~ "-Test"),
+    ifelse(
+      labels == "t-test", expression(italic(t) ~ "-Test"),
+      ifelse(
+        labels == "Mann-Whitney U", expression("Mann-Whitney" ~ italic(U)),
+        labels
+      )
+    )
+  )
+  }) +
+  guides(fill = guide_colorbar(
+    title.position = "left",
+    title.hjust = 0.5,
+    title.vjust = 0.8,
+    barwidth = unit(4, "cm")
+))
+
+ggsave(paste0(out_dir, "numba_C_fold_change_fau.png"), width = 9, height = 5, dpi = 300)
+
 
 ```

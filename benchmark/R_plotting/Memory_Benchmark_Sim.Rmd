@@ -24,12 +24,11 @@ library_colors <- c("NApy" = "#5b87ab", "SciPy" = "#018571", "SciPy - Python Loo
 
 ## ----- Methods Sorting -----
 
-method_sorting <-  c("Pearson", "Spearman", "T-Test", "Mann-Whitney U", "ANOVA", "Kruskal-Wallis", "Chi2")
+method_sorting <-  c("Pearson", "Spearman", "t-test", "Mann-Whitney U", "ANOVA", "Kruskal-Wallis", "Chi-squared")
 library_sorting <- c("NApy", "Pingouin", "SciPy", "pandas", "SciPy - Python Loop", "pandas - Python Loop")
 ncol <- 4
 
 ## ----- Paths -----
-input_dir <- "../results/runtime/"
 out_dir <- "../plots/"
 
 
@@ -76,6 +75,46 @@ read_allocated_memory_files <- function(file_path){
   return(summ_dt)
 }
 
+read_peak_memory_files <- function(file_path){
+  dt <- read.csv(file_path, sep="\t", row.names = 1)
+  dt <- as.data.table(dt)
+  
+  colnames(dt) <- c("run", "threads", "library", "method", "memory", "samples", "features", "na_ratio")
+  
+  ## ----- Summarizing Runs -----
+  summ_dt <- dt %>% group_by(samples, features, threads, na_ratio, method, library) %>% summarize(mean_mem = mean(memory, na.rm = TRUE), sd_mem = sd(memory, na.rm = TRUE))
+  return(summ_dt)
+}
+
+rename_data <- function(dt){
+  dt$threads <- as.factor(dt$threads)
+  dt$features <- as.factor(dt$features)
+  dt$samples <- as.factor(dt$samples)
+  # Rename libraries
+  dt$library <- gsub("nanpy", "NApy", dt$library)
+  dt$library <- gsub("napy_cpp", "NApy with C++", dt$library)
+  dt$library <- gsub("napy_numba", "NApy with Numba", dt$library)
+  dt$library <- gsub("numba", "NApy with Numba", dt$library)
+  dt$library[dt$library == "scipy_par"] <- "SciPy - Python Loop"
+  dt$library <- gsub("scipy", "SciPy", dt$library)
+  dt$library <- gsub("pingouin", "Pingouin", dt$library)
+  dt$library[dt$library == "SciPypar"] <- "SciPy - Python Loop"
+  dt$library[dt$library == "pandas_par"] <- "pandas - Python Loop"
+  dt$library[dt$library == "pandaspar"] <- "pandas - Python Loop"
+  dt$library[dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
+  # Rename methods
+  dt$method <- gsub("pearson", "Pearson", dt$method)
+  dt$method <- gsub("ttest", "t-test", dt$method)
+  dt$method <- gsub("anova", "ANOVA", dt$method)
+  dt$method <- gsub("chi2", "Chi-squared", dt$method)
+  dt$method <- gsub("spearman", "Spearman", dt$method)
+  dt$method <- gsub("mwu", "Mann-Whitney U", dt$method)
+  dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", dt$method)
+  dt$method <- gsub("kw", "Kruskal-Wallis", dt$method)
+  dt$method <- gsub("kruskal", "Kruskal-Wallis", dt$method)
+  dt$method <- factor(dt$method, levels = method_sorting)
+  return(dt)
+}  
 ```
 
 # Allocated Memory
@@ -85,51 +124,26 @@ read_allocated_memory_files <- function(file_path){
 ```{r}
 ## Memory 
 input_dir <- "../results/memory/"
-memory_dt <- NULL
+alloc_memory_dt <- NULL
 
 for(file in list.files(input_dir, pattern = "_updated")){
   dt <- read_allocated_memory_files(paste0(input_dir, file))
   dt$file <- file
-  if(is.null(memory_dt)){
-    memory_dt <- dt
+  if(is.null(alloc_memory_dt)){
+    alloc_memory_dt <- dt
   } else {
-    memory_dt <- rbind(memory_dt, dt)
+    alloc_memory_dt <- rbind(alloc_memory_dt, dt)
   }
 }
 
-memory_dt$threads <- as.factor(memory_dt$threads)
-memory_dt$features <- as.factor(memory_dt$features)
-memory_dt$samples <- as.factor(memory_dt$samples)
-
-
-# Rename libraries
-
-memory_dt$library <- gsub("nanpy", "NApy with C++", memory_dt$library)
-memory_dt$library <- gsub("numba", "NApy with Numba", memory_dt$library)
-memory_dt$library <- gsub("scipy", "SciPy", memory_dt$library)
-memory_dt$library <- gsub("pingouin", "Pingouin", memory_dt$library)
-memory_dt$library[memory_dt$library == "SciPypar"] <- "SciPy - Python Loop"
-memory_dt$library[memory_dt$library == "pandaspar"] <- "pandas - Python Loop"
-memory_dt$library[memory_dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
-
-# Rename methods
-memory_dt$method <- gsub("pearson", "Pearson", memory_dt$method)
-memory_dt$method <- gsub("ttest", "T-Test", memory_dt$method)
-memory_dt$method <- gsub("anova", "ANOVA", memory_dt$method)
-memory_dt$method <- gsub("chi2", "Chi2", memory_dt$method)
-memory_dt$method <- gsub("spearman", "Spearman", memory_dt$method)
-memory_dt$method <- gsub("mwu", "Mann-Whitney U", memory_dt$method)
-memory_dt$method <- gsub("kruskal", "Kruskal-Wallis", memory_dt$method) # in runtime = kruskal_wallis
-
-memory_dt$method <- factor(memory_dt$method, levels = method_sorting)
+alloc_memory_dt <- rename_data(alloc_memory_dt)
 
 ```
 
-
-## Final Table
+## Final Allocated Memory Table
 
 ```{r}
-dt <- memory_dt
+dt <- alloc_memory_dt
 dt$samples <- NULL
 dt$features <- NULL
 dt$file <- NULL
@@ -151,76 +165,29 @@ write.csv(dt, paste0(out_dir, "peak_allocated_memory.csv"))
 # Peak-Memory Consumption
 
 ```{r}
-
-read_peak_memory_files <- function(file_path){
-  dt <- read.csv(file_path, sep="\t", row.names = 1)
-  dt <- as.data.table(dt)
-  
-  colnames(dt) <- c("run", "threads", "library", "method", "memory", "samples", "features", "na_ratio")
-  
-  ## ----- Summarizing Runs -----
-  summ_dt <- dt %>% group_by(samples, features, threads, na_ratio, method, library) %>% summarize(mean_mem = mean(memory, na.rm = TRUE), sd_mem = sd(memory, na.rm = TRUE))
-  return(summ_dt)
-}
-
-
-method_sorting <-  c("Pearson", "Spearman", "t-test", "Mann-Whitney U", "ANOVA", "Kruskal-Wallis", "Chi-squared")
-
-rename_data <- function(runtime_dt){
-  runtime_dt$threads <- as.factor(runtime_dt$threads)
-  runtime_dt$features <- as.factor(runtime_dt$features)
-  runtime_dt$samples <- as.factor(runtime_dt$samples)
-  # Rename libraries
-  runtime_dt$library <- gsub("nanpy", "NApy", runtime_dt$library)
-  runtime_dt$library <- gsub("napy_cpp", "NApy with C++", runtime_dt$library)
-  runtime_dt$library <- gsub("napy_numba", "NApy with Numba", runtime_dt$library)
-  runtime_dt$library[runtime_dt$library == "scipy_par"] <- "SciPy - Python Loop"
-  runtime_dt$library <- gsub("scipy", "SciPy", runtime_dt$library)
-  runtime_dt$library <- gsub("pingouin", "Pingouin", runtime_dt$library)
-  runtime_dt$library[runtime_dt$library == "SciPypar"] <- "SciPy - Python Loop"
-  runtime_dt$library[runtime_dt$library == "pandas_par"] <- "pandas - Python Loop"
-  runtime_dt$library[runtime_dt$library == "Pingouinpar"] <- "Pingouin - Python Loop"
-  # Rename methods
-  runtime_dt$method <- gsub("pearson", "Pearson", runtime_dt$method)
-  runtime_dt$method <- gsub("ttest", "t-test", runtime_dt$method)
-  runtime_dt$method <- gsub("anova", "ANOVA", runtime_dt$method)
-  runtime_dt$method <- gsub("chi2", "Chi-squared", runtime_dt$method)
-  runtime_dt$method <- gsub("spearman", "Spearman", runtime_dt$method)
-  runtime_dt$method <- gsub("mwu", "Mann-Whitney U", runtime_dt$method)
-  runtime_dt$method <- gsub("kruskal_wallis", "Kruskal-Wallis", runtime_dt$method)
-  runtime_dt$method <- gsub("kw", "Kruskal-Wallis", runtime_dt$method)
-  runtime_dt$method <- factor(runtime_dt$method, levels = method_sorting)
-  
-  return(runtime_dt)
-}  
-
-```
-
-```{r}
 ## Memory 
 input_dir <- "../results/memory/"
-memory_dt <- NULL
+peak_memory_dt <- NULL
 
-for(file in list.files(input_dir, pattern = "peak_memory")){
+for(file in list.files(input_dir, pattern = "results.tsv")){
   dt <- read_peak_memory_files(paste0(input_dir, file))
   dt$file <- file
-  if(is.null(memory_dt)){
-    memory_dt <- dt
+  if(is.null(peak_memory_dt)){
+    peak_memory_dt <- dt
   } else {
-    memory_dt <- rbind(memory_dt, dt)
+    peak_memory_dt <- rbind(peak_memory_dt, dt)
   }
 }
 
-memory_dt <- rename_data(memory_dt)
+peak_memory_dt <- rename_data(peak_memory_dt)
 ```
 
-Plot Peak Memory
+Plot Peak Memory Only for NApy C++ and Numba
 
 ```{r}
-## NApy C++ vs numba
-memory_dt_napy <- memory_dt[memory_dt$library %in% c("NApy with C++", "NApy with Numba"),]
+peak_memory_dt_napy <- peak_memory_dt[peak_memory_dt$library %in% c("NApy with C++", "NApy with Numba"),]
 
-tmp <- memory_dt_napy %>% mutate(method = recode_factor(method, 
+tmp <- peak_memory_dt_napy %>% mutate(method = recode_factor(method, 
                                               "Pearson"="Pearson", 
                                               "Spearman"="Spearman",
                                               "t-test" = "italic(t)~-Test",
@@ -255,20 +222,20 @@ Update table with default NApy implementation
 
 ```{r}
 ## ----- For parametric libraries -> make numba -> NApy -----
-new_napy_param <- memory_dt_napy[memory_dt_napy$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & memory_dt_napy$library == "NApy with Numba",]
+new_napy_param <- peak_memory_dt_napy[peak_memory_dt_napy$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & peak_memory_dt_napy$library == "NApy with Numba",]
 new_napy_param$library <- "NApy"
-new_napy_non_param <- memory_dt_napy[memory_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney U") & memory_dt_napy$library == "NApy with C++",]
+new_napy_non_param <- peak_memory_dt_napy[peak_memory_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney U") & peak_memory_dt_napy$library == "NApy with C++",]
 new_napy_non_param$library <- "NApy"
 
-memory_dt <- memory_dt[!memory_dt$library %in% c("NApy with C++", "NApy with Numba"),]
-memory_dt <- rbind(new_napy_param, new_napy_non_param, memory_dt)
+peak_memory_dt <- peak_memory_dt[!peak_memory_dt$library %in% c("NApy with C++", "NApy with Numba"),]
+peak_memory_dt <- rbind(new_napy_param, new_napy_non_param, peak_memory_dt)
 
-memory_dt$method <- factor(memory_dt$method, levels = method_sorting)
-memory_dt$library <- factor(memory_dt$library, levels = library_sorting)
+peak_memory_dt$method <- factor(peak_memory_dt$method, levels = method_sorting)
+peak_memory_dt$library <- factor(peak_memory_dt$library, levels = library_sorting)
 ```
 
 ```{r}
-tmp <- memory_dt %>% mutate(method = recode_factor(method, 
+tmp <- peak_memory_dt %>% mutate(method = recode_factor(method, 
                                               "Pearson"="Pearson", 
                                               "Spearman"="Spearman",
                                               "t-test" = "italic(t)~-Test",
@@ -277,12 +244,68 @@ tmp <- memory_dt %>% mutate(method = recode_factor(method,
                                               "Kruskal-Wallis" = "Kruskal-Wallis",
                                               "Chi-squared" = "chi^2~-Test"))
 
-#tmp$method <- factor(tmp$method, levels = c("Pearson", "italic(t)~-Test", "ANOVA", "chi^2~-Test", "Spearman", "Mann-Whitney~italic(U)","Kruskal-Wallis"))
-
 
 ggplot(tmp, aes(x = as.factor(threads), y = mean_mem, fill = library)) + geom_bar(stat="identity", position = position_dodge(width = 0.9)) + geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem), width = 0.2, position = position_dodge(width = 0.9)) +
   facet_wrap(~method, scales="free_y", ncol = 7, label = "label_parsed") + theme_bw() + labs(x = "Threads", y= "Mean Peak Resident Memory (MB)", fill = "Library") + scale_fill_manual(values = library_colors) + theme(strip.background = element_rect(fill = "white"), legend.position = "bottom") + guides(fill = guide_legend(nrow = 1))
 
 ggsave(paste0(out_dir, "peak_memory_napy_competitors.png"), width = 12, height = 4, dpi = 300)
+
+```
+
+
+# Hardware Comparison
+
+
+```{r}
+## Memory 
+input_dir <- "../results/memory/"
+peak_memory_fau_dt <- NULL
+
+for(file in list.files(input_dir, pattern = "results_fau.tsv")){
+  dt <- read_peak_memory_files(paste0(input_dir, file))
+  dt$file <- file
+  if(is.null(peak_memory_fau_dt)){
+    peak_memory_fau_dt <- dt
+  } else {
+    peak_memory_fau_dt <- rbind(peak_memory_fau_dt, dt)
+  }
+}
+
+peak_memory_fau_dt <- rename_data(peak_memory_fau_dt)
+```
+
+Plot Peak Memory
+
+```{r}
+## NApy C++ vs numba
+peak_memory_fau_dt_napy <- peak_memory_fau_dt[peak_memory_fau_dt$library %in% c("NApy with C++", "NApy with Numba"),]
+
+tmp <- peak_memory_fau_dt_napy %>% mutate(method = recode_factor(method, 
+                                              "Pearson"="Pearson", 
+                                              "Spearman"="Spearman",
+                                              "t-test" = "italic(t)~-Test",
+                                              "Mann-Whitney U" = "Mann-Whitney~italic(U)",
+                                              "ANOVA" = "ANOVA",
+                                              "Kruskal-Wallis" = "Kruskal-Wallis",
+                                              "Chi-squared" = "chi^2~-Test"))
+
+tmp$method <- factor(tmp$method, levels = c("Pearson", "italic(t)~-Test", "ANOVA", "chi^2~-Test", "Spearman", "Mann-Whitney~italic(U)","Kruskal-Wallis"))
+
+
+memory_fau_c_numba_plot <- ggplot(tmp[tmp$samples == 1000 & tmp$features == 1000,], aes(x = as.factor(threads), y = mean_mem, fill = library)) + 
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) + geom_errorbar(aes(ymin = mean_mem - sd_mem, ymax = mean_mem + sd_mem), width = 0.2, position = position_dodge(width = 0.9)) +
+  facet_wrap(~method, ncol = 4, label = "label_parsed", scales = "free_y") + 
+  theme_bw() + scale_fill_manual(values = library_colors, labels = c("C++", "Numba")) + labs(x = "Number of Threads", y = "Mean Peak Resident Memory (MB)", fill = "NApy Version") + theme_new + theme(strip.background = element_rect(fill = "white"), legend.position = "top")
+
+ggsave(paste0(out_dir, "peak_memory_fau_napy_numba_c++.png"), width = 10, height = 8, dpi = 300)
+```
+
+
+Wrap with runtime plot together:
+
+```{r}
+wrap_elements(runtime_fau_c_numba_plot) / wrap_elements(memory_fau_c_numba_plot) + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(1, 1.5), axes = "keep") & theme(legend.position = "top", plot.tag = element_text(size = 20, face = "bold")) 
+
+ggsave(paste0(out_dir, "runtime_memory_fau_napy_numba_c++.png"), width = 9, height = 11, dpi = 300)
 
 ```
