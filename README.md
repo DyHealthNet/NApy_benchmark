@@ -15,16 +15,15 @@ The actual benchmarking scripts for running memory, runtime and CHRIS benchmark 
 * `memory/`: contains allocated memory results (x_y_memory_updated.csv) and peak resident memory results of simulated data on EURAC (peak_memory_x_y_results.csv) and FAU (peak_memory_x_y_results_fau.tsv) servers
 * `chris/`: contains runtime results of the CHRIS study data (chris_x_y_results.csv) and the amount of missing values per data type (chris_x_missing.csv)
 
-A robustness analysis on the stability of NApy's missing data removal mechanism was performed with the scripts and result datasets being available in `robustness/`. 
+A robustness analysis on the stability of NApy's missing data removal mechanism was performed with the scripts and result datasets being available in `robustness/` (not included in the manuscript). 
 
 R scripts for generating the plots included in our manuscript are available under `benchmark/R_plotting/` while the generated plots for our paper can be found under `benchmark/plots/`. 
-* generation of plots on runtime of simulated data including missing value benchmarks are included in: `Runtime_Benchmark_Sim.Rmd`
-* generation of plots on memory usage of simulated data are included in: `Memory_Benchmark_Sim.Rmd`
-* generation of plots on missing values and runtime of CHRIS data are included in `Runtime_Benchmark_Real.Rmd`
-* generation of plots on the robustness analysis in `Robustness_Missingness.Rmd`
+* `Runtime_Benchmark_Sim.Rmd`: plots on runtime of simulated data including missing value benchmarks
+* `Memory_Benchmark_Sim.Rmd`: plots on memory usage of simulated data
+* `Runtime_Benchmark_Real.Rmd`: plots on missing values and runtime of CHRIS data
+* `Robustness_Missingness.Rmd`: plots on the robustness analysis (not included in the manuscript)
 
 We offer a conda environment supporting the necessary python packages used in the benchmarking scripts in the `benchmark/` directory.
-
 
 ## CHRIS benchmark data generation
 
