@@ -224,7 +224,7 @@ Update table with default NApy implementation
 ## ----- For parametric libraries -> make numba -> NApy -----
 new_napy_param <- peak_memory_dt_napy[peak_memory_dt_napy$method %in% c("Pearson", "Chi-squared", "ANOVA", "t-test") & peak_memory_dt_napy$library == "NApy with Numba",]
 new_napy_param$library <- "NApy"
-new_napy_non_param <- peak_memory_dt_napy[peak_memory_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney U") & peak_memory_dt_napy$library == "NApy with C++",]
+new_napy_non_param <- peak_memory_dt_napy[peak_memory_dt_napy$method %in% c("Spearman", "Kruskal-Wallis", "Mann-Whitney U") & peak_memory_dt_napymem$library == "NApy with C++",]
 new_napy_non_param$library <- "NApy"
 
 peak_memory_dt <- peak_memory_dt[!peak_memory_dt$library %in% c("NApy with C++", "NApy with Numba"),]

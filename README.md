@@ -7,7 +7,20 @@ In order to run the benchmarks and tests described below, you need to have NApy 
 
 # Benchmarking
 
-All benchmark implementations and results presented in our paper can be found in the `benchmark/` directory. Competitor implementations and our (parallelized) Python baseline implementation can be found in the subdirectory `benchmark/competitors/`, wrapper functions for NApy's functions to be called by benchmarking scripts can be found under `benchmark/nanpy_wrapper/`. The actual benchmarking scripts for running memory, runtime and CHRIS benchmark are located directly in `benchmark/`. Results of our runtime and memory analyses can be found in the respective subdirectories under `benchmark/results/`. R scripts for generating the plots included in our manuscript are available under `benchmark/R_plotting/` while the generated plots for our paper can be found under `benchmark/plots/`. We offer a conda environment supporting the necessary python packages used in the benchmarking scripts in the `benchmark/` directory.
+All benchmark implementations and results presented in our paper can be found in the `benchmark/` directory. Competitor implementations and our (parallelized) Python baseline implementation can be found in the subdirectory `benchmark/competitors/`, wrapper functions for NApy's functions to be called by benchmarking scripts can be found under `benchmark/nanpy_wrapper/`. 
+
+The actual benchmarking scripts for running memory, runtime and CHRIS benchmark are located directly in `benchmark/`. Results of our runtime and memory analyses can be found in the respective subdirectories under `benchmark/results/`. 
+* `runtime/` : contains runtime results of simulated data on EURAC (simulated_x_y_results.csv) and FAU (runtime_x_y_numba_cpp_fau.csv) servers
+* `na_ratio/`: contains runtime results of simulated data with different amounts of missing values: MCAR (na_ratio_x_y_updated.csv), MAR (na_ratios_x_y_MAR.csv), MNAR (na_ratios_x_y_MNAR.csv)
+* `memory/`: contains allocated memory results (x_y_memory_updated.csv) and peak resident memory results of simulated data on EURAC (peak_memory_x_y_results.csv) and FAU (peak_memory_x_y_results_fau.tsv) servers
+* `chris/`: contains runtime results of the CHRIS study data (chris_x_y_results.csv)
+
+R scripts for generating the plots included in our manuscript are available under `benchmark/R_plotting/` while the generated plots for our paper can be found under `benchmark/plots/`. 
+* generation of plots on runtime of simulated data including missing value benchmarks are included in: `Runtime_Benchmark_Sim.Rmd`
+* generation of plots on memory usage of simulated data are included in: `Memory_Benchmark_Sim.Rmd`
+* generation of plots on runtime of CHRIS data are included in `Runtime_Benchmark_Real.Rmd`
+
+We offer a conda environment supporting the necessary python packages used in the benchmarking scripts in the `benchmark/` directory.
 
 ## CHRIS benchmark data generation
 
